@@ -2,47 +2,54 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 
-class User extends Authenticatable
+class User extends Authenticatable implements HasMedia
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+    use HasFactory, Notifiable, InteractsWithMedia;
+    
     protected $fillable = [
-        'name',
-        'email',
-        'password',
+        'username', 'email', 'password', 'branch_id', 'role', 'is_active'
     ];
-
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
+    
+    protected $hidden = ['password', 'remember_token'];
+    
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'is_active' => 'boolean',
     ];
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    
+    public function branch()
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+        return $this->belongsTo(Branch::class);
+    }
+    
+    public function orders()
+    {
+        return $this->hasMany(Order::class, 'created_by');
+    }
+    
+    // Decorator Pattern Implementation
+    public function hasPermission($permission)
+    {
+        $rolePermissions = [
+            'admin' => ['*'],
+            'stock_manager' => ['manage_stock', 'view_products', 'approve_orders'],
+            'order_creator' => ['create_orders', 'view_orders', 'view_products'],
+            'branch_manager' => ['create_orders', 'view_orders', 'view_products', 'manage_branch_stock']
         ];
+        
+        $permissions = $rolePermissions[$this->role] ?? [];
+        
+        return in_array('*', $permissions) || in_array($permission, $permissions);
+    }
+    
+    public function canAccessMainBranchFeatures()
+    {
+        return $this->branch->is_main && in_array($this->role, ['admin', 'stock_manager']);
     }
 }
