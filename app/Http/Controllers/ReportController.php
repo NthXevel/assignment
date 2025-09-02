@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Stock;
+use App\Models\Order;
+use App\Models\Branch;
+use App\Models\ProductCategory;
 
 class ReportController extends Controller
 {
@@ -11,7 +14,14 @@ class ReportController extends Controller
     {
         $this->middleware('auth');
     }
-    
+
+    // Landing page for reports
+    public function index()
+    {
+        return view('reports.index');
+    }
+
+    // Stock report
     public function stock(Request $request)
     {
         $query = Stock::with(['product.category', 'branch']);
@@ -45,7 +55,8 @@ class ReportController extends Controller
         
         return view('reports.stock', compact('stocks', 'branches', 'categories', 'totalValue', 'lowStockCount'));
     }
-    
+
+    // Orders report
     public function orders(Request $request)
     {
         $query = Order::with(['requestingBranch', 'supplyingBranch', 'items.product']);
@@ -71,7 +82,6 @@ class ReportController extends Controller
         
         $orders = $query->orderBy('created_at', 'desc')->get();
         
-        // Calculate statistics
         $stats = [
             'total_orders' => $orders->count(),
             'total_value' => $orders->sum('total_amount'),
@@ -81,11 +91,10 @@ class ReportController extends Controller
         
         return view('reports.orders', compact('orders', 'stats'));
     }
-    
+
+    // Sales report
     public function sales(Request $request)
     {
-        // This would typically show sales to customers, but for this B2B system,
-        // we'll show branch transfer statistics
         $query = Order::where('status', 'received')
                      ->with(['requestingBranch', 'items.product.category']);
         
@@ -99,7 +108,6 @@ class ReportController extends Controller
         
         $completedOrders = $query->get();
         
-        // Calculate analytics
         $analytics = [
             'total_transfers' => $completedOrders->count(),
             'total_value' => $completedOrders->sum('total_amount'),
@@ -117,4 +125,3 @@ class ReportController extends Controller
         return view('reports.sales', compact('completedOrders', 'analytics'));
     }
 }
-
