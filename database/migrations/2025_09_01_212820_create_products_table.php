@@ -17,7 +17,10 @@ return new class extends Migration
             $table->string('model')->nullable();
             $table->string('sku')->unique();
             $table->foreignId('category_id')->constrained('product_categories');
-            $table->decimal('cost_price', 10, 2);
+
+            // Store encrypted cost_price as text
+            $table->text('cost_price');  
+
             $table->decimal('selling_price', 10, 2);
             $table->text('description')->nullable();
             $table->json('specifications')->nullable();

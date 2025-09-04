@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Crypt;
+
 
 class Product extends Model
 {
@@ -38,6 +41,20 @@ class Product extends Model
         $mainBranch = Branch::getMainBranch();
         return $this->stocks()->where('branch_id', $mainBranch->id)->first();
     }
+
+   // Encrypt cost_price before saving
+    public function setCostPriceAttribute($value)
+    {
+        $this->attributes['cost_price'] = Crypt::encrypt($value);
+    }
+
+    // Decrypt cost_price when accessing
+    public function getCostPriceAttribute($value)
+    {
+        return Crypt::decrypt($value);
+    }
+
+
 }
 
 

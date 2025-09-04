@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\Stock;
 use App\Models\Order;
 use App\Models\Branch;
+use Illuminate\Support\Facades\DB;
+
 
 class DashboardController extends Controller
 {
@@ -62,3 +64,4 @@ class DashboardController extends Controller
         return view('dashboard', compact('stats', 'recentOrders', 'lowStockItems'));
     }
 }
+
