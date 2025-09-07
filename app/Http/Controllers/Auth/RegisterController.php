@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Branch;
 use Illuminate\Foundation\Auth\RegistersUsers;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -20,6 +21,15 @@ class RegisterController extends Controller
     }
 
     /**
+     * Show the registration form with dynamic branches.
+     */
+    public function showRegistrationForm()
+    {
+        $branches = Branch::all(); // fetch all branches from DB
+        return view('auth.register', compact('branches'));
+    }
+
+    /**
      * Validate registration input.
      */
     protected function validator(array $data)
@@ -28,7 +38,7 @@ class RegisterController extends Controller
             'username' => ['required', 'string', 'max:255', 'unique:users'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'branch_id' => ['required', 'integer', 'between:1,5'], // restrict to 1-5
+            'branch_id' => ['required', 'exists:branches,id'], // dynamic check
             'role' => ['required', 'in:admin,stock_manager,branch_manager,order_creator'],
         ]);
     }
@@ -54,5 +64,4 @@ class RegisterController extends Controller
 
         return redirect('/login')->with('status', 'Registration successful! Please login.');
     }
-
 }

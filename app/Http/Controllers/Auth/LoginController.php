@@ -24,6 +24,8 @@ class LoginController extends Controller
     {
         // Mark user as active
         $user->update(['is_active' => true]);
+        // Redirect to dashboard
+        return redirect('/dashboard');
     }
 
     /**
@@ -33,7 +35,7 @@ class LoginController extends Controller
     {
         $user = auth()->user();
         if ($user) {
-            $user->update(['is_active' => false]); // 👈 set inactive on logout
+            $user->update(['is_active' => false]); //set inactive on logout
         }
 
         $this->guard()->logout();

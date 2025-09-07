@@ -15,7 +15,7 @@ class StandardOrderStrategy implements OrderProcessingStrategy
 
     public function calculateShippingTime(Order $order): int
     {
-        return 3; // 3 days
+        return 3; // Estimated 3 days
     }
 
     public function getPriority(): string

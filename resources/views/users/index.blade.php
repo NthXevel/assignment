@@ -2,69 +2,86 @@
 
 @section('content')
     <div class="page-title">
-        <h1>Product Management</h1>
-        <p class="page-subtitle">Manage all products across branches</p>
+        <h1>User Management</h1>
+        <p class="page-subtitle">Manage users across branches</p>
     </div>
 
     <div class="filter-add-container">
         {{-- Filter Form --}}
-        <form method="GET" action="{{ route('products.index') }}" class="filter-form">
-            <select name="category" onchange="this.form.submit()">
-                <option value="">-- All Categories --</option>
-                @foreach($categories as $category)
-                    <option value="{{ $category->slug }}" {{ request('category') == $category->slug ? 'selected' : '' }}>
-                        {{ $category->name }}
+        <form method="GET" action="{{ route('users.index') }}" class="filter-form">
+            {{-- Branch Filter (Admin only) --}}
+            @if(auth()->user()->role === 'admin')
+                <select name="branch" onchange="this.form.submit()">
+                    <option value="">-- All Branches --</option>
+                    @foreach($branches as $branch)
+                        <option value="{{ $branch->id }}" {{ request('branch') == $branch->id ? 'selected' : '' }}>
+                            {{ $branch->name }}
+                        </option>
+                    @endforeach
+                </select>
+            @endif
+
+            {{-- Role Filter --}}
+            <select name="role" onchange="this.form.submit()">
+                <option value="">-- All Roles --</option>
+                @foreach($roles as $role)
+                    <option value="{{ $role }}" {{ request('role') == $role ? 'selected' : '' }}>
+                        {{ ucfirst(str_replace('_', ' ', $role)) }}
                     </option>
                 @endforeach
             </select>
 
-            <input type="text" name="search" placeholder="Search product..." value="{{ request('search') }}">
+            {{-- Search --}}
+            <input type="text" name="search" placeholder="Search username or email..." value="{{ request('search') }}">
 
             <button type="submit" class="filter-btn">Filter</button>
 
-            {{-- Only Admin can Add Product --}}
-            @if(auth()->user()->role === 'admin')
-                <a href="{{ route('products.create') }}" class="filter-btn">
-                    <i class="fas fa-plus"></i> Add Product
+            {{-- Add User (Admin + Branch Manager only) --}}
+            @if(in_array(auth()->user()->role, ['admin', 'branch_manager']))
+                <a href="{{ route('users.create') }}" class="filter-btn">
+                    <i class="fas fa-plus"></i> Add User
                 </a>
             @endif
         </form>
     </div>
+
     <div class="table-container">
-        <h3 class="chart-title"><i class="fas fa-mobile-alt"></i> All Products</h3>
+        <h3 class="chart-title"><i class="fas fa-users"></i> All Users</h3>
         <div class="table-responsive">
             <table class="table">
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Name</th>
-                        <th>Category</th>
-                        <th>Cost Price (RM)</th>
-                        <th>Selling Price (RM)</th>
-                        @if(auth()->user()->role === 'admin')
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Branch</th>
+                        @if(in_array(auth()->user()->role, ['admin', 'branch_manager']))
                             <th>Actions</th>
                         @endif
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($products as $product)
+                    @forelse($users as $user)
                         <tr>
-                            <td>#{{ $product->id }}</td>
-                            <td>{{ $product->name }}</td>
-                            <td>{{ $product->category->name ?? '-' }}</td>
-                            <td>{{ number_format($product->cost_price, 2) }}</td>
-                            <td>{{ number_format($product->selling_price, 2) }}</td>
+                            <td>#{{ $user->id }}</td>
+                            <td>{{ $user->username }}</td>
+                            <td>{{ $user->email }}</td>
+                            <td>{{ ucfirst(str_replace('_', ' ', $user->role)) }}</td>
+                            <td>{{ $user->branch->name ?? '-' }}</td>
 
-                            @if(auth()->user()->role === 'admin')
+                            {{-- Only admin & branch_manager can edit/delete --}}
+                            @if(in_array(auth()->user()->role, ['admin', 'branch_manager']))
                                 <td style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="{{ route('products.edit', $product->id) }}" class="btn-theme btn-theme-primary btn-sm">
+                                    <a href="{{ route('users.edit', $user->id) }}" 
+                                       class="btn-theme btn-theme-primary btn-sm">
                                         <i class="fas fa-edit"></i> Edit
                                     </a>
-                                    <form action="{{ route('products.destroy', $product->id) }}" method="POST"
-                                        style="display:inline;">
+                                    <form action="{{ route('users.destroy', $user->id) }}" method="POST"
+                                          style="display:inline;">
                                         @csrf @method('DELETE')
                                         <button class="btn-theme btn-theme-danger btn-sm"
-                                            onclick="return confirm('Delete this product?')">
+                                                onclick="return confirm('Delete this user?')">
                                             <i class="fas fa-trash"></i> Delete
                                         </button>
                                     </form>
@@ -73,7 +90,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center">No products found</td>
+                            <td colspan="6" class="text-center">No users found</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -82,26 +99,22 @@
 
         {{-- Pagination --}}
         <div class="mt-3 flex justify-between items-center">
-            {{-- Previous / Next buttons --}}
             <div class="space-x-1">
-                @if (!$products->onFirstPage())
-                    <a href="{{ $products->previousPageUrl() }}" class="btn btn-primary">« Previous</a>
+                @if (!$users->onFirstPage())
+                    <a href="{{ $users->previousPageUrl() }}" class="btn btn-primary">« Previous</a>
                 @endif
 
-                @if ($products->hasMorePages())
-                    <a href="{{ $products->nextPageUrl() }}" class="btn btn-primary">Next »</a>
+                @if ($users->hasMorePages())
+                    <a href="{{ $users->nextPageUrl() }}" class="btn btn-primary">Next »</a>
                 @endif
             </div>
-
-            {{-- Showing results --}}
             <div>
-                Showing {{ $products->firstItem() }} to {{ $products->lastItem() }} of {{ $products->total() }} results
+                Showing {{ $users->firstItem() }} to {{ $users->lastItem() }} of {{ $users->total() }} results
             </div>
         </div>
-
     </div>
 
-    {{-- Styles --}}
+    {{-- Styles (same as your product page) --}}
     <style>
         .pagination {
             font-size: 0.875rem;
@@ -113,7 +126,6 @@
             min-width: auto;
         }
 
-        /* Container */
         .table-container {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -143,16 +155,13 @@
             background: rgba(102, 126, 234, 0.6);
         }
 
-        /* Table */
         .table th,
         .table td {
             padding: 10px 12px;
         }
 
-        /* Buttons */
         .btn-theme {
             padding: 8px 15px;
-            /* base padding for all buttons */
             border-radius: 8px;
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
@@ -168,23 +177,15 @@
         }
 
         .btn-theme-primary:hover,
-        .btn-theme-success:hover,
         .btn-theme-danger:hover {
             opacity: 0.9;
         }
 
-        .btn-theme-success {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-
         .btn-theme-danger {
             background: #ef4444;
-            /* just color changes */
             color: white;
         }
 
-        /* Filter Form */
         .filter-add-container {
             display: flex;
             flex-wrap: wrap;
@@ -209,7 +210,6 @@
             border: 1px solid rgba(102, 126, 234, 0.3);
             outline: none;
             text-decoration: none;
-            /* for <a> */
             display: flex;
             align-items: center;
             gap: 6px;

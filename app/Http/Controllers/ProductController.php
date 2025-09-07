@@ -31,7 +31,7 @@ class ProductController extends Controller
                     ->orWhere('sku', 'like', "%{$search}%");
             });
 
-        $products = $query->get();
+        $products = $query->paginate(10);
         $categories = ProductCategory::all();
 
         return view('products.index', compact('products', 'categories'));
@@ -107,7 +107,8 @@ class ProductController extends Controller
             return back()->with('error', 'Cannot delete product with order history');
         }
 
-        $product->delete();
+        // Deactivate product
+        $product->update(['is_active' => false]);
 
         return redirect()->route('products.index')
             ->with('success', 'Product deleted successfully');

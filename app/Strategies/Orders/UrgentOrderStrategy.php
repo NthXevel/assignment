@@ -8,7 +8,7 @@ class UrgentOrderStrategy implements OrderProcessingStrategy
 {
     public function processOrder(Order $order): bool
     {
-        if ($order->creator->hasPermission('approve_urgent_orders')) {
+        if ($order->creator && $order->creator->hasPermission('approve_urgent_orders')) {
             $order->approve();
         } else {
             $order->status = 'pending';
@@ -21,7 +21,7 @@ class UrgentOrderStrategy implements OrderProcessingStrategy
 
     public function calculateShippingTime(Order $order): int
     {
-        return 1; // 1 day
+        return 1; // Next-day shipping
     }
 
     public function getPriority(): string

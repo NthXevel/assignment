@@ -2,69 +2,77 @@
 
 @section('content')
     <div class="page-title">
-        <h1>Product Management</h1>
-        <p class="page-subtitle">Manage all products across branches</p>
+        <h1>Branch Management</h1>
+        <p class="page-subtitle">Manage and view all company branches</p>
     </div>
 
     <div class="filter-add-container">
-        {{-- Filter Form --}}
-        <form method="GET" action="{{ route('products.index') }}" class="filter-form">
-            <select name="category" onchange="this.form.submit()">
-                <option value="">-- All Categories --</option>
-                @foreach($categories as $category)
-                    <option value="{{ $category->slug }}" {{ request('category') == $category->slug ? 'selected' : '' }}>
-                        {{ $category->name }}
-                    </option>
-                @endforeach
-            </select>
-
-            <input type="text" name="search" placeholder="Search product..." value="{{ request('search') }}">
-
-            <button type="submit" class="filter-btn">Filter</button>
-
-            {{-- Only Admin can Add Product --}}
+        <form method="GET" action="{{ route('branches.index') }}" class="filter-form">
+            {{-- Only Admin can Add Branch --}}
             @if(auth()->user()->role === 'admin')
-                <a href="{{ route('products.create') }}" class="filter-btn">
-                    <i class="fas fa-plus"></i> Add Product
+                <a href="{{ route('branches.create') }}" class="filter-btn">
+                    <i class="fas fa-plus"></i> Add Branch
                 </a>
             @endif
         </form>
     </div>
+
     <div class="table-container">
-        <h3 class="chart-title"><i class="fas fa-mobile-alt"></i> All Products</h3>
+        <h3 class="chart-title"><i class="fas fa-store"></i> All Branches</h3>
         <div class="table-responsive">
             <table class="table">
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Name</th>
-                        <th>Category</th>
-                        <th>Cost Price (RM)</th>
-                        <th>Selling Price (RM)</th>
+                        <th>Branch Name</th>
+                        <th>Location</th>
+
+                        @if(auth()->user()->role === 'admin')
+                            <th>Users</th>
+                        @endif
+
+                        @if(in_array(auth()->user()->role, ['admin', 'stock_manager']))
+                            <th>Stocks</th>
+                        @endif
+
                         @if(auth()->user()->role === 'admin')
                             <th>Actions</th>
                         @endif
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($products as $product)
-                        <tr>
-                            <td>#{{ $product->id }}</td>
-                            <td>{{ $product->name }}</td>
-                            <td>{{ $product->category->name ?? '-' }}</td>
-                            <td>{{ number_format($product->cost_price, 2) }}</td>
-                            <td>{{ number_format($product->selling_price, 2) }}</td>
+                    @forelse($branches as $branch)
+                        <tr
+                            class="{{ auth()->user()->role !== 'admin' && auth()->user()->role !== 'stock_manager' && auth()->user()->branch_id == $branch->id ? 'bg-indigo-50' : '' }}">
+                            <td>#{{ $branch->id }}</td>
+                            <td>
+                                {{ $branch->name }}
+                                @if(auth()->user()->role !== 'admin' && auth()->user()->role !== 'stock_manager' && auth()->user()->branch_id == $branch->id)
+                                    <span class="btn-theme btn-theme-success btn-xs">
+                                        <i class="fas fa-check-circle"></i> Current Branch
+                                    </span>
+                                @endif
+                            </td>
+                            <td>{{ $branch->location }}</td>
+
+                            @if(auth()->user()->role === 'admin')
+                                <td>{{ $branch->users_count }}</td>
+                            @endif
+
+                            @if(in_array(auth()->user()->role, ['admin', 'stock_manager']))
+                                <td>{{ $branch->stocks_count }}</td>
+                            @endif
 
                             @if(auth()->user()->role === 'admin')
                                 <td style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="{{ route('products.edit', $product->id) }}" class="btn-theme btn-theme-primary btn-sm">
+                                    <a href="{{ route('branches.edit', $branch->id) }}" class="btn-theme btn-theme-primary btn-sm">
                                         <i class="fas fa-edit"></i> Edit
                                     </a>
-                                    <form action="{{ route('products.destroy', $product->id) }}" method="POST"
+                                    <form action="{{ route('branches.destroy', $branch->id) }}" method="POST"
                                         style="display:inline;">
                                         @csrf @method('DELETE')
                                         <button class="btn-theme btn-theme-danger btn-sm"
-                                            onclick="return confirm('Delete this product?')">
+                                            onclick="return confirm('Delete this branch and all related stocks?')">
                                             <i class="fas fa-trash"></i> Delete
                                         </button>
                                     </form>
@@ -73,7 +81,10 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center">No products found</td>
+                            <td colspan="{{ auth()->user()->role === 'admin' ? 6 : (in_array(auth()->user()->role, ['stock_manager']) ? 4 : 3) }}"
+                                class="text-center">
+                                No branches found
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -82,26 +93,23 @@
 
         {{-- Pagination --}}
         <div class="mt-3 flex justify-between items-center">
-            {{-- Previous / Next buttons --}}
             <div class="space-x-1">
-                @if (!$products->onFirstPage())
-                    <a href="{{ $products->previousPageUrl() }}" class="btn btn-primary">« Previous</a>
+                @if (!$branches->onFirstPage())
+                    <a href="{{ $branches->previousPageUrl() }}" class="btn btn-primary">« Previous</a>
                 @endif
 
-                @if ($products->hasMorePages())
-                    <a href="{{ $products->nextPageUrl() }}" class="btn btn-primary">Next »</a>
+                @if ($branches->hasMorePages())
+                    <a href="{{ $branches->nextPageUrl() }}" class="btn btn-primary">Next »</a>
                 @endif
             </div>
 
-            {{-- Showing results --}}
             <div>
-                Showing {{ $products->firstItem() }} to {{ $products->lastItem() }} of {{ $products->total() }} results
+                Showing {{ $branches->firstItem() }} to {{ $branches->lastItem() }} of {{ $branches->total() }} results
             </div>
         </div>
-
     </div>
 
-    {{-- Styles --}}
+    {{-- Styles copied from product page --}}
     <style>
         .pagination {
             font-size: 0.875rem;
@@ -152,7 +160,6 @@
         /* Buttons */
         .btn-theme {
             padding: 8px 15px;
-            /* base padding for all buttons */
             border-radius: 8px;
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
@@ -180,8 +187,16 @@
 
         .btn-theme-danger {
             background: #ef4444;
-            /* just color changes */
             color: white;
+        }
+
+        .btn-xs {
+            padding: 3px 8px;
+            font-size: 0.7rem;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
         /* Filter Form */
@@ -209,7 +224,6 @@
             border: 1px solid rgba(102, 126, 234, 0.3);
             outline: none;
             text-decoration: none;
-            /* for <a> */
             display: flex;
             align-items: center;
             gap: 6px;

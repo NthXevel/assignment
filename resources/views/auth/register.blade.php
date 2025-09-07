@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -101,6 +102,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="register-container">
         <h1><i class="fas fa-bolt"></i> ElectroStore</h1>
@@ -112,9 +114,8 @@
             {{-- Username --}}
             <div class="form-group">
                 <label for="username">{{ __('Username') }}</label>
-                <input id="username" type="text" 
-                       class="form-control @error('username') is-invalid @enderror" 
-                       name="username" value="{{ old('username') }}" required autofocus>
+                <input id="username" type="text" class="form-control @error('username') is-invalid @enderror"
+                    name="username" value="{{ old('username') }}" required autofocus>
                 @error('username')
                     <span style="color:red; font-size: 0.85rem;">{{ $message }}</span>
                 @enderror
@@ -123,9 +124,8 @@
             {{-- Email --}}
             <div class="form-group">
                 <label for="email">{{ __('Email Address') }}</label>
-                <input id="email" type="email" 
-                       class="form-control @error('email') is-invalid @enderror" 
-                       name="email" value="{{ old('email') }}" required>
+                <input id="email" type="email" class="form-control @error('email') is-invalid @enderror" name="email"
+                    value="{{ old('email') }}" required>
                 @error('email')
                     <span style="color:red; font-size: 0.85rem;">{{ $message }}</span>
                 @enderror
@@ -134,14 +134,14 @@
             {{-- Branch --}}
             <div class="form-group">
                 <label for="branch_id">{{ __('Branch') }}</label>
-                <select id="branch_id" name="branch_id" 
-                        class="form-control @error('branch_id') is-invalid @enderror" required>
+                <select id="branch_id" name="branch_id" class="form-control @error('branch_id') is-invalid @enderror"
+                    required>
                     <option value="">-- Select Branch --</option>
-                    <option value="1" {{ old('branch_id') == 1 ? 'selected' : '' }}>Branch 1</option>
-                    <option value="2" {{ old('branch_id') == 2 ? 'selected' : '' }}>Branch 2</option>
-                    <option value="3" {{ old('branch_id') == 3 ? 'selected' : '' }}>Branch 3</option>
-                    <option value="4" {{ old('branch_id') == 4 ? 'selected' : '' }}>Branch 4</option>
-                    <option value="5" {{ old('branch_id') == 5 ? 'selected' : '' }}>Branch 5</option>
+                    @foreach ($branches as $branch)
+                        <option value="{{ $branch->id }}" {{ old('branch_id') == $branch->id ? 'selected' : '' }}>
+                            {{ $branch->name }}
+                        </option>
+                    @endforeach
                 </select>
                 @error('branch_id')
                     <span style="color:red; font-size: 0.85rem;">{{ $message }}</span>
@@ -151,12 +151,14 @@
             {{-- Role --}}
             <div class="form-group">
                 <label for="role">{{ __('Role') }}</label>
-                <select id="role" name="role" 
-                        class="form-control @error('role') is-invalid @enderror" required>
+                <select id="role" name="role" class="form-control @error('role') is-invalid @enderror" required>
                     <option value="">-- Select Role --</option>
-                    <option value="stock_manager" {{ old('role') == 'stock_manager' ? 'selected' : '' }}>Stock Manager</option>
-                    <option value="branch_manager" {{ old('role') == 'branch_manager' ? 'selected' : '' }}>Branch Manager</option>
-                    <option value="order_creator" {{ old('role') == 'order_creator' ? 'selected' : '' }}>Order Creator</option>
+                    <option value="stock_manager" {{ old('role') == 'stock_manager' ? 'selected' : '' }}>Stock Manager
+                    </option>
+                    <option value="branch_manager" {{ old('role') == 'branch_manager' ? 'selected' : '' }}>Branch Manager
+                    </option>
+                    <option value="order_creator" {{ old('role') == 'order_creator' ? 'selected' : '' }}>Order Creator
+                    </option>
                 </select>
                 @error('role')
                     <span style="color:red; font-size: 0.85rem;">{{ $message }}</span>
@@ -166,9 +168,8 @@
             {{-- Password --}}
             <div class="form-group">
                 <label for="password">{{ __('Password') }}</label>
-                <input id="password" type="password" 
-                       class="form-control @error('password') is-invalid @enderror" 
-                       name="password" required>
+                <input id="password" type="password" class="form-control @error('password') is-invalid @enderror"
+                    name="password" required>
                 @error('password')
                     <span style="color:red; font-size: 0.85rem;">{{ $message }}</span>
                 @enderror
@@ -177,8 +178,7 @@
             {{-- Confirm Password --}}
             <div class="form-group">
                 <label for="password-confirm">{{ __('Confirm Password') }}</label>
-                <input id="password-confirm" type="password" class="form-control" 
-                       name="password_confirmation" required>
+                <input id="password-confirm" type="password" class="form-control" name="password_confirmation" required>
             </div>
 
             <button type="submit" class="btn-register">{{ __('Register') }}</button>
@@ -189,4 +189,5 @@
         </form>
     </div>
 </body>
+
 </html>

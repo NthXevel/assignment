@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +8,7 @@
     <title>ElectroStore Dashboard</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
-        <style>
+    <style>
         * {
             margin: 0;
             padding: 0;
@@ -37,12 +38,12 @@
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
             border-right: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 20px 0;
+            padding: 4px 0;
             box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
         }
 
         .logo {
-            padding: 0 20px 20px;
+            padding: 0 20px 15px;
             border-bottom: 1px solid rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
         }
@@ -102,6 +103,7 @@
             align-items: center;
             justify-content: between;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            justify-content: flex-end;
         }
 
         .search-bar {
@@ -137,6 +139,7 @@
         .user-info {
             display: flex;
             align-items: center;
+            justify-content: flex-end;
             gap: 15px;
         }
 
@@ -478,6 +481,8 @@
             color: #666;
         }
 
+
+
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-areas:
@@ -505,6 +510,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="dashboard">
         <!-- Sidebar -->
@@ -514,23 +520,30 @@
                 <p>Management System</p>
             </div>
             <ul class="nav-menu">
-                <li class="nav-item"><a href="{{ route('dashboard') }}" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li class="nav-item"><a href="{{ route('products.index') }}" class="nav-link"><i class="fas fa-mobile-alt"></i> Products</a></li>
-                <li class="nav-item"><a href="{{ route('stocks.index') }}" class="nav-link"><i class="fas fa-boxes"></i> Stock Management</a></li>
-                <li class="nav-item"><a href="{{ route('orders.index') }}" class="nav-link"><i class="fas fa-shopping-cart"></i> Orders</a></li>
-                <li class="nav-item"><a href="{{ route('branches.index') }}" class="nav-link"><i class="fas fa-store"></i> Branches</a></li>
-                <li class="nav-item"><a href="{{ route('users.index') }}" class="nav-link"><i class="fas fa-users"></i> User Management</a></li>
-                <li class="nav-item"><a href="{{ route('reports.index') }}" class="nav-link"><i class="fas fa-chart-bar"></i> Reports</a></li>
-                <li class="nav-item"><a href="{{ route('settings.index') }}" class="nav-link"><i class="fas fa-cog"></i> Settings</a></li>
+                <li class="nav-item"><a href="{{ route('dashboard') }}" class="nav-link"><i
+                            class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li class="nav-item"><a href="{{ route('products.index') }}" class="nav-link"><i
+                            class="fas fa-mobile-alt"></i> Products</a></li>
+                <li class="nav-item"><a href="{{ route('stocks.index') }}" class="nav-link"><i class="fas fa-boxes"></i>
+                        Stock Management</a></li>
+                <li class="nav-item"><a href="{{ route('orders.index') }}" class="nav-link"><i
+                            class="fas fa-shopping-cart"></i> Orders</a></li>
+                <li class="nav-item"><a href="{{ route('branches.index') }}" class="nav-link"><i
+                            class="fas fa-store"></i> Branches</a></li>
+                {{-- Show User Management only for admin or stock_manager --}}
+                @if(auth()->check() && in_array(auth()->user()->role, ['admin', 'branch_manager']))
+                    <li class="nav-item"><a href="{{ route('users.index') }}" class="nav-link"><i class="fas fa-users"></i>
+                            User Management</a></li>
+                @endif
+                <li class="nav-item"><a href="{{ route('records.index') }}" class="nav-link"><i
+                            class="fas fa-chart-bar"></i> Records</a></li>
+                <li class="nav-item"><a href="{{ route('settings.index') }}" class="nav-link"><i class="fas fa-cog"></i>
+                        Settings</a></li>
             </ul>
         </aside>
 
         <!-- Header -->
         <header class="header">
-            <div class="search-bar">
-                <i class="fas fa-search search-icon"></i>
-                <input type="text" class="search-input" placeholder="Search products, orders, or branches...">
-            </div>
 
             <div class="user-info">
                 @auth
@@ -541,7 +554,8 @@
                     </div>
                     <form action="{{ route('logout') }}" method="POST" style="margin:0;">
                         @csrf
-                        <button type="submit" class="btn btn-link" style="border:none;background:none;color:#667eea;cursor:pointer;">
+                        <button type="submit" class="btn btn-link"
+                            style="border:none;background:none;color:#667eea;cursor:pointer;">
                             <i class="fas fa-sign-out-alt"></i>
                         </button>
                     </form>
@@ -558,4 +572,5 @@
         </main>
     </div>
 </body>
+
 </html>

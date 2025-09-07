@@ -22,4 +22,9 @@ class OrderContext
     {
         return $this->strategy->calculateShippingTime($order);
     }
+
+    public function getPriority(): string
+    {
+        return $this->strategy->getPriority();
+    }
 }

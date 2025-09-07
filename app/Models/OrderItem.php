@@ -2,36 +2,28 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class OrderItem extends Model
 {
-    protected $fillable = ['order_id', 'product_id', 'quantity', 'unit_price', 'total_price'];
-    
-    protected $casts = [
-        'unit_price' => 'decimal:2',
-        'total_price' => 'decimal:2',
+    use HasFactory;
+
+    protected $fillable = [
+        'order_id',
+        'product_id',
+        'quantity',
+        'unit_price',
+        'total_price',
     ];
-    
+
     public function order()
     {
         return $this->belongsTo(Order::class);
     }
-    
+
     public function product()
     {
         return $this->belongsTo(Product::class);
     }
-    
-    protected static function booted()
-    {
-        static::saving(function ($item) {
-            $item->total_price = $item->quantity * $item->unit_price;
-        });
-        
-        static::saved(function ($item) {
-            $item->order->calculateTotal();
-        });
-    }
 }
-

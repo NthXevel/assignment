@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             ProductSeeder::class,
             StockSeeder::class,
             StockMovementSeeder::class, 
+            OrderSeeder::class,
         ]);
         
         $this->command->info('Database seeded successfully!');
