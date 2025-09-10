@@ -15,9 +15,9 @@ class Product extends Model
     ];
     
     protected $casts = [
-        'cost_price' => 'decimal:2',
+
         'selling_price' => 'decimal:2',
-        'specifications' => 'array',
+        'specifications' => 'json',
         'is_active' => 'boolean',
     ];
     

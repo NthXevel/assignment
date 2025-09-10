@@ -25,30 +25,39 @@ class StockController extends Controller
     {
         $user = auth()->user();
         $branches = Branch::all();
+        $products = Product::where('is_active', true)->get();
+        $branchFilter = $request->branch;
 
         $query = Stock::with(['product', 'branch']);
 
-        // Optional branch filter
-        if ($request->branch) {
-            $query->where('branch_id', $request->branch);
-        }
-
-        // Low stock filter
-        if ($request->low_stock) {
-            $query->whereRaw('quantity <= minimum_threshold');
+        // Branch filter
+        if ($branchFilter) {
+            $query->where('branch_id', $branchFilter);
         }
 
         // Search filter
         if ($request->search) {
-            $query->whereHas('product', function ($q) use ($request) {
-                $q->where('name', 'like', "%{$request->search}%");
+            $query->whereHas('product', function($q) use ($request) {
+                $q->where('name', 'like', "%{$request->search}%")
+                  ->orWhere('sku', 'like', "%{$request->search}%");
             });
         }
 
-        $stocks = $query->paginate(20)->withQueryString();
-        $lowStockCount = Stock::whereRaw('quantity <= minimum_threshold')->count();
+        // Sorting
+        switch ($request->sort) {
+            case 'quantity_asc':
+                $query->orderBy('quantity', 'asc');
+                break;
+            case 'quantity_desc':
+                $query->orderBy('quantity', 'desc');
+                break;
+            default:
+                $query->orderBy('id', 'asc');
+        }
 
-        return view('stocks.index', compact('stocks', 'branches', 'lowStockCount'));
+        $stocks = $query->paginate(20)->withQueryString();
+
+        return view('stocks.index', compact('stocks', 'branches', 'branchFilter'));
     }
 
     public function create()

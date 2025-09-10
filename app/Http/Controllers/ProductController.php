@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use App\Models\Product;
 use App\Models\ProductCategory;
-use App\Factories\ProductFactory;
-
+use App\Factories\Products\ProductFactory;
 
 class ProductController extends Controller
 {
@@ -20,15 +20,18 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         $query = Product::with('category')
+            ->where('is_active', true)
             ->when($request->category, function ($q, $category) {
                 $q->whereHas('category', function ($cat) use ($category) {
                     $cat->where('slug', $category);
                 });
             })
             ->when($request->search, function ($q, $search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('model', 'like', "%{$search}%")
-                    ->orWhere('sku', 'like', "%{$search}%");
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('name', 'like', "%{$search}%")
+                        ->orWhere('model', 'like', "%{$search}%")
+                        ->orWhere('sku', 'like', "%{$search}%");
+                });
             });
 
         $products = $query->paginate(10);
@@ -46,23 +49,43 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'model' => 'nullable|string|max:255',
-            'sku' => 'required|string|unique:products',
+            'name' => 'required|string|max:255|unique:products,name',
+            'model' => 'required|string|unique:products,model',
+            'sku' => 'required|string|unique:products,sku',
             'category_id' => 'required|exists:product_categories,id',
             'cost_price' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
+            'selling_price' => 'required|numeric|gt:cost_price',
             'description' => 'nullable|string',
-            'specifications' => 'nullable|array',
+            'specifications' => 'nullable|json', // Change to json validation
         ]);
 
-        // Use Factory Method Pattern
-        $category = ProductCategory::find($validated['category_id']);
-        $factory = ProductFactory::getFactory($category->slug);
-        $product = $factory->createProduct($validated);
+        try {
+            // Decode specifications JSON if present
+            if (!empty($validated['specifications'])) {
+                $validated['specifications'] = json_decode($validated['specifications'], true);
+            } else {
+                $validated['specifications'] = [];
+            }
 
-        return redirect()->route('products.show', $product)
-            ->with('success', 'Product created successfully');
+            // Create the product
+            $product = Product::create([
+                'name' => $validated['name'],
+                'model' => $validated['model'],
+                'sku' => $validated['sku'],
+                'category_id' => $validated['category_id'],
+                'cost_price' => round((float) $validated['cost_price'], 2),
+                'selling_price' => round((float) $validated['selling_price'], 2),
+                'description' => $validated['description'],
+                'specifications' => $validated['specifications'],
+                'is_active' => true
+            ]);
+
+            return redirect()->route('products.show', $product)
+                ->with('success', 'Product created successfully');
+        } catch (\Exception $e) {
+            return back()->withInput()
+                ->withErrors(['error' => 'Failed to create product: ' . $e->getMessage()]);
+        }
     }
 
     public function show(Product $product)
@@ -79,39 +102,112 @@ class ProductController extends Controller
 
     public function update(Request $request, Product $product)
     {
+        // Validate input (model & sku not editable)
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'model' => 'nullable|string|max:255',
-            'sku' => 'required|string|unique:products,sku,' . $product->id,
             'category_id' => 'required|exists:product_categories,id',
             'cost_price' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
+            'selling_price' => 'required|numeric|gt:cost_price',
             'description' => 'nullable|string',
             'specifications' => 'nullable|array',
+            'specifications.key' => 'nullable|array',
+            'specifications.value' => 'nullable|array',
+            'specifications.key.*' => 'required_with:specifications|string',
+            'specifications.value.*' => 'required_with:specifications|string',
+            'is_active' => 'nullable|boolean',
         ]);
 
-        $product->update($validated);
+        try {
+            // Convert specifications to associative array
+            $specs = [];
+            if (!empty($validated['specifications']['key'])) {
+                foreach ($validated['specifications']['key'] as $index => $key) {
+                    $value = $validated['specifications']['value'][$index] ?? null;
+                    if ($key && $value !== null) {
+                        $specs[$key] = $value;
+                    }
+                }
+            }
 
-        return redirect()->route('products.show', $product)
-            ->with('success', 'Product updated successfully');
+            // Update product fields
+            $product->name = $validated['name'];
+            $product->category_id = $validated['category_id'];
+            $product->cost_price = round((float) $validated['cost_price'], 2);  // safe decimal
+            $product->selling_price = round((float) $validated['selling_price'], 2); // safe decimal
+            $product->description = $validated['description'] ?? '';
+            $product->specifications = $specs; // saved as array (casts to JSON)
+            $product->is_active = $validated['is_active'] ?? $product->is_active;
+
+            $product->save();
+
+            return redirect()->route('products.show', $product)
+                ->with('success', 'Product updated successfully.');
+        } catch (\Exception $e) {
+            return back()->withInput()
+                ->withErrors(['error' => 'Failed to update product: ' . $e->getMessage()]);
+        }
     }
+
+
+
 
     public function destroy(Product $product)
     {
-        // Check if product has associated orders or stock
-        if ($product->stocks()->sum('quantity') > 0) {
-            return back()->with('error', 'Cannot delete product with existing stock');
+        $totalStock = $product->stocks()->sum('quantity');
+
+        if ($totalStock > 0) {
+            $mainBranch = \App\Models\Branch::where('is_main', true)->firstOrFail();
+
+            foreach ($product->stocks as $stock) {
+                if ($stock->branch_id !== $mainBranch->id && $stock->quantity > 0) {
+                    \App\Models\Order::create([
+                        'branch_id' => $stock->branch_id,
+                        'target_branch_id' => $mainBranch->id,
+                        'product_id' => $product->id,
+                        'quantity' => $stock->quantity,
+                        'reason' => 'Product deleted, stock returned to main branch',
+                    ]);
+
+                    $mainStock = $product->stocks()
+                        ->where('branch_id', $mainBranch->id)
+                        ->first();
+
+                    if ($mainStock) {
+                        $mainStock->increment('quantity', $stock->quantity);
+                    } else {
+                        $product->stocks()->create([
+                            'branch_id' => $mainBranch->id,
+                            'quantity' => $stock->quantity,
+                        ]);
+                    }
+
+                    $stock->update(['quantity' => 0]);
+                }
+            }
         }
 
-        if ($product->orderItems()->exists()) {
-            return back()->with('error', 'Cannot delete product with order history');
-        }
-
-        // Deactivate product
         $product->update(['is_active' => false]);
 
         return redirect()->route('products.index')
-            ->with('success', 'Product deleted successfully');
+            ->with('success', 'Product removed successfully. Stock returned to main branch.');
+    }
+
+    // Add Category with auto-slug
+    public function storeCategory(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:product_categories,name',
+            'description' => 'nullable|string',
+        ]);
+
+        \App\Models\ProductCategory::create([
+            'name' => $validated['name'],
+            'slug' => \Illuminate\Support\Str::slug($validated['name']),
+            'description' => $validated['description'] ?? null,
+            'status' => 'active', // default to active
+        ]);
+
+        return redirect()->route('products.index')
+            ->with('success', 'Category added successfully');
     }
 }
-

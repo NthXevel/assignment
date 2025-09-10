@@ -19,16 +19,25 @@
             </select>
 
             <input type="text" name="search" placeholder="Search product..." value="{{ request('search') }}">
-
             <button type="submit" class="filter-btn">Filter</button>
-
-            {{-- Only Admin can Add Product --}}
-            @if(auth()->user()->role === 'admin')
-                <a href="{{ route('products.create') }}" class="filter-btn">
-                    <i class="fas fa-plus"></i> Add Product
-                </a>
-            @endif
         </form>
+
+        {{-- Add Product --}}
+        @if(auth()->user()->role === 'admin')
+            <a href="{{ route('products.create') }}" class="btn-action">
+                <i class="fas fa-plus"></i> Add Product
+            </a>
+
+            {{-- Add Category (inline form) --}}
+            <form method="POST" action="{{ route('products.store-category') }}" class="filter-form">
+                @csrf
+                <input type="text" name="name" placeholder="New category..." required>
+                <input type="text" name="description" placeholder="Description (optional)">
+                <button type="submit" class="btn-action">
+                    <i class="fas fa-plus"></i> Add Category
+                </button>
+            </form>
+        @endif
     </div>
     <div class="table-container">
         <h3 class="chart-title"><i class="fas fa-mobile-alt"></i> All Products</h3>
@@ -50,7 +59,11 @@
                     @forelse($products as $product)
                         <tr>
                             <td>#{{ $product->id }}</td>
-                            <td>{{ $product->name }}</td>
+                            <td>
+                                <a href="{{ route('products.show', $product->id) }}" class="text-blue-600 hover:underline">
+                                    {{ $product->name }}
+                                </a>
+                            </td>
                             <td>{{ $product->category->name ?? '-' }}</td>
                             <td>{{ number_format($product->cost_price, 2) }}</td>
                             <td>{{ number_format($product->selling_price, 2) }}</td>
@@ -227,6 +240,26 @@
 
         .filter-form button:hover,
         .filter-form a.filter-btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-action {
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+
+        .btn-action:hover {
             opacity: 0.9;
         }
     </style>

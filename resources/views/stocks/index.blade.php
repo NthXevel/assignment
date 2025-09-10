@@ -9,18 +9,29 @@
     <div class="filter-add-container">
         {{-- Filter by Branch --}}
         <form method="GET" action="{{ route('stocks.index') }}" class="filter-form">
-            <select name="branch" onchange="this.form.submit()">
+            <select name="branch" onchange="this.form.submit()" class="form-control">
                 <option value="">-- All Branches --</option>
                 @foreach($branches as $branch)
-                    <option value="{{ $branch->id }}" {{ ($branchFilter ?? null) == $branch->id ? 'selected' : '' }}>
+                    <option value="{{ $branch->id }}" {{ $branchFilter == $branch->id ? 'selected' : '' }}>
                         {{ $branch->name }}
                     </option>
                 @endforeach
             </select>
 
-            <input type="text" name="search" placeholder="Search stock..." value="{{ request('search') }}">
+            <input type="text" 
+                   name="search" 
+                   placeholder="Search stock..." 
+                   value="{{ request('search') }}" 
+                   class="form-control">
 
-            <button type="submit" class="filter-btn"><i class="fas fa-filter"></i> Filter</button>
+            <button type="submit" class="btn-theme btn-theme-primary">
+                <i class="fas fa-filter"></i> Filter
+            </button>
+
+            {{-- Preserve sort parameter if it exists --}}
+            @if(request('sort'))
+                <input type="hidden" name="sort" value="{{ request('sort') }}">
+            @endif
         </form>
     </div>
 
@@ -33,7 +44,20 @@
                         <th>ID</th>
                         <th>Product</th>
                         <th>Branch</th>
-                        <th>Quantity</th>
+                        <th>
+                            Quantity
+                            <a href="{{ route('stocks.index', [
+                                'branch' => request('branch'),
+                                'search' => request('search'),
+                                'sort' => request('sort') === 'quantity_asc' ? 'quantity_desc' : 'quantity_asc'
+                            ]) }}" 
+                            class="btn-theme btn-theme-sort btn-sm">
+                                <i class="fas fa-sort{{ 
+                                    request('sort') === 'quantity_asc' ? '-up' : 
+                                    (request('sort') === 'quantity_desc' ? '-down' : '') 
+                                }}"></i>
+                            </a>
+                        </th>
                         <th>Cost Price (RM)</th>
                         <th>Selling Price (RM)</th>
                         @if(auth()->user()->role === 'admin')
@@ -43,17 +67,25 @@
                 </thead>
                 <tbody>
                     @forelse($stocks as $stock)
-                        <tr>
+                        <tr class="{{ $stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : '') }}">
                             <td>#{{ $stock->id }}</td>
                             <td>{{ $stock->product->name ?? '-' }}</td>
                             <td>{{ $stock->branch->name ?? '-' }}</td>
-                            <td>{{ $stock->quantity }}</td>
+                            <td>
+                                <span class="quantity-badge {{ 
+                                    $stock->quantity <= 0 ? 'zero-stock' : 
+                                    ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : 'normal-stock') 
+                                }}">
+                                    {{ $stock->quantity }}
+                                </span>
+                            </td>
                             <td>{{ number_format($stock->product->cost_price ?? 0, 2) }}</td>
                             <td>{{ number_format($stock->product->selling_price ?? 0, 2) }}</td>
 
                             @if(auth()->user()->role === 'admin')
                                 <td style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="{{ route('stocks.edit', $stock->id) }}" class="btn-theme btn-theme-primary btn-sm">
+                                    <a href="{{ route('stocks.edit', $stock->id) }}" 
+                                       class="btn-theme btn-theme-primary btn-sm">
                                         <i class="fas fa-edit"></i> Edit
                                     </a>
                                 </td>
@@ -144,21 +176,67 @@
             opacity: 0.9;
         }
 
+        .filter-add-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
         .filter-form {
             display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
+            gap: 12px;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .filter-form select,
-        .filter-form input,
-        .filter-form button {
-            padding: 8px 15px;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            border: 1px solid rgba(102, 126, 234, 0.3);
-            margin-bottom: 15px; 
+        .filter-form input {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            min-width: 200px;
+        }
+
+        .filter-form select:focus,
+        .filter-form input:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .btn-theme-sort {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            text-decoration: none;
+            margin-left: 4px;
+        }
+
+        .btn-theme-sort:hover {
+            opacity: 1;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.875rem;
+        }
+
+        th {
+            position: relative;
+            padding: 12px;
+            background: #f8fafc;
+            border-bottom: 2px solid #e2e8f0;
+            font-weight: 600;
+            text-align: left;
+            color: #1a202c;
         }
     </style>
 @endsection

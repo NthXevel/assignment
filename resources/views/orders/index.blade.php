@@ -1,17 +1,17 @@
-{{-- resources/views/orders/index.blade.php --}}
 @extends('layouts.app')
 
 @section('content')
     <div class="page-title">
-        <h1>Order Management</h1>
-        <p class="page-subtitle">Manage branch transfer orders</p>
+        <h1>Orders</h1>
+        <p class="page-subtitle">Manage and track orders between branches</p>
     </div>
 
     <div class="filter-add-container">
-        {{-- Filters + Create Order on same line (uses same style as product page) --}}
+        {{-- Filter & Search Form --}}
         <form method="GET" action="{{ route('orders.index') }}" class="filter-form">
+            {{-- Status Filter --}}
             <select name="status" onchange="this.form.submit()">
-                <option value="">-- All Statuses --</option>
+                <option value="">All Statuses</option>
                 <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
                 <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
                 <option value="shipped" {{ request('status') == 'shipped' ? 'selected' : '' }}>Shipped</option>
@@ -19,116 +19,122 @@
                 <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Cancelled</option>
             </select>
 
-            @if(auth()->user()->role === 'admin' || auth()->user()->role === 'stock_manager')
-                <select name="branch" onchange="this.form.submit()">
-                    <option value="">-- All Branches --</option>
-                    @foreach($branches ?? [] as $branch)
-                        <option value="{{ $branch->id }}" {{ request('branch') == $branch->id ? 'selected' : '' }}>
-                            {{ $branch->name }}
-                        </option>
-                    @endforeach
-                </select>
+            {{-- Search Input --}}
+            <input type="text" name="search" placeholder="Search order # or branch..." value="{{ request('search') }}">
+            <button type="submit" class="filter-btn">
+                <i class="fas fa-search"></i> Search
+            </button>
+
+            {{-- Create New Order --}}
+            @php $role = auth()->user()->role; @endphp
+            @if(in_array($role, ['admin', 'branch_manager', 'stock_manager']))
+                <a href="{{ route('orders.create') }}" class="btn-theme btn-theme-primary">
+                    <i class="fas fa-plus"></i> New Order
+                </a>
             @endif
-
-            <input type="text" name="search" placeholder="Search order NO. or user" value="{{ request('search') }}">
-
-            <button type="submit" class="filter-btn">Filter</button>
-
-            {{-- Create Order button styled like filter --}}
-            <a href="{{ route('orders.create') }}" class="filter-btn">
-                <i class="fas fa-plus"></i> Create Order
-            </a>
         </form>
+
+
     </div>
 
     <div class="table-container">
-        <h3 class="chart-title"><i class="fas fa-list"></i> All Orders</h3>
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order #</th>
+                    <th>From Branch</th>
+                    <th>To Branch</th>
+                    <th>Status</th>
+                    <th>Total Amount</th>
+                    <th>Created At</th>
+                    @if(in_array($role, ['admin', 'branch_manager', 'stock_manager']))
+                        <th>Actions</th>
+                    @endif
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($orders as $order)
                     <tr>
-                        <th>Order #</th>
-                        <th>Requesting Branch</th>
-                        <th>Supplying Branch</th>
-                        <th>Status</th>
-                        <th>Total Amount (RM)</th>
-                        <th>Created By</th>
-                        <th>Date</th>
-                        @if(auth()->user()->role === 'admin' || auth()->user()->role === 'branch_manager')
-                            <th>Actions</th>
+                        <td>{{ $order->order_number }}</td>
+                        <td>{{ $order->requestingBranch->name ?? 'N/A' }}</td>
+                        <td>{{ $order->supplyingBranch->name ?? 'N/A' }}</td>
+
+                        {{-- Status Badge --}}
+                        @php
+                            $statusStyles = [
+                                'pending' => 'background:#fff7ed;color:#92400e',
+                                'approved' => 'background:#ecfdf5;color:#065f46',
+                                'shipped' => 'background:#eff6ff;color:#1e3a8a',
+                                'received' => 'background:#f3f4f6;color:#374151',
+                                'cancelled' => 'background:#fff1f2;color:#991b1b',
+                            ];
+                        @endphp
+                        <td>
+                            <span style="padding:6px 10px; border-radius:12px; font-weight:600; font-size:0.85rem;
+                                                                     {{ $statusStyles[$order->status] ?? '' }}">
+                                {{ ucfirst($order->status) }}
+                            </span>
+                        </td>
+
+                        <td>RM {{ number_format($order->total_amount, 2) }}</td>
+                        <td>{{ $order->created_at->format('Y-m-d H:i') }}</td>
+
+                        {{-- Actions --}}
+                        @if(in_array($role, ['admin', 'branch_manager', 'stock_manager']))
+                            <td>
+                                <a href="{{ route('orders.show', $order) }}" class="btn-theme btn-theme-secondary btn-sm">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+
+                                @if($order->status == 'pending')
+                                    <form action="{{ route('orders.approve', $order) }}" method="POST" style="display:inline;">
+                                        @csrf
+                                        <button class="btn-theme btn-theme-success btn-sm"
+                                            onclick="return confirm('Approve this order?')">
+                                            <i class="fas fa-check"></i> Approve
+                                        </button>
+                                    </form>
+                                @endif
+
+                                @if($order->status == 'approved')
+                                    <form action="{{ route('orders.ship', $order) }}" method="POST" style="display:inline;">
+                                        @csrf
+                                        <button class="btn-theme btn-theme-info btn-sm" onclick="return confirm('Ship this order?')">
+                                            <i class="fas fa-truck"></i> Ship
+                                        </button>
+                                    </form>
+                                @endif
+
+                                @if($order->status == 'shipped')
+                                    <form action="{{ route('orders.receive', $order) }}" method="POST" style="display:inline;">
+                                        @csrf
+                                        <button class="btn-theme btn-theme-warning btn-sm"
+                                            onclick="return confirm('Mark as received?')">
+                                            <i class="fas fa-box"></i> Receive
+                                        </button>
+                                    </form>
+                                @endif
+
+                                @if(in_array($order->status, ['pending', 'approved']))
+                                    <form action="{{ route('orders.cancel', $order) }}" method="POST" style="display:inline;">
+                                        @csrf
+                                        <button class="btn-theme btn-theme-danger btn-sm"
+                                            onclick="return confirm('Cancel this order?')">
+                                            <i class="fas fa-times"></i> Cancel
+                                        </button>
+                                    </form>
+                                @endif
+                            </td>
                         @endif
                     </tr>
-                </thead>
-                <tbody>
-                    @forelse($orders as $order)
-                        <tr>
-                            <td><strong>{{ $order->order_number }}</strong></td>
-                            <td>{{ $order->requestingBranch->name ?? '-' }}</td>
-                            <td>{{ $order->supplyingBranch->name ?? '-' }}</td>
-                            <td>
-                                <span style="padding:6px 10px; border-radius:12px; font-weight:600; font-size:0.85rem;
-                                            {{ $order->status == 'pending' ? 'background:#fff7ed;color:#92400e' : '' }}
-                                            {{ $order->status == 'approved' ? 'background:#ecfdf5;color:#065f46' : '' }}
-                                            {{ $order->status == 'shipped' ? 'background:#eff6ff;color:#1e3a8a' : '' }}
-                                            {{ $order->status == 'received' ? 'background:#f3f4f6;color:#374151' : '' }}
-                                            {{ $order->status == 'cancelled' ? 'background:#fff1f2;color:#991b1b' : '' }}
-                                        ">
-                                    {{ ucfirst($order->status) }}
-                                </span>
-                            </td>
-                            <td>RM {{ number_format($order->total_amount ?? 0, 2) }}</td>
-                            <td>{{ $order->creator->username ?? '-' }}</td>
-                            <td>{{ $order->created_at->format('Y-m-d') }}</td>
-
-                            @if(auth()->user()->role === 'admin' || auth()->user()->role === 'branch_manager')
-                                <td style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="{{ route('orders.show', $order) }}" class="btn-theme btn-theme-primary btn-sm">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-
-                                    @if($order->status == 'pending' && auth()->user()->role !== 'branch_manager')
-                                        <form action="{{ route('orders.approve', $order) }}" method="POST" style="display:inline;">
-                                            @csrf
-                                            <button class="btn-theme btn-theme-success btn-sm"
-                                                onclick="return confirm('Approve this order?')">
-                                                <i class="fas fa-check"></i> Approve
-                                            </button>
-                                        </form>
-                                    @endif
-
-                                    @if($order->status == 'approved' && auth()->user()->role !== 'branch_manager')
-                                        <form action="{{ route('orders.ship', $order) }}" method="POST" style="display:inline;">
-                                            @csrf
-                                            <button class="btn-theme btn-theme-primary btn-sm"
-                                                onclick="return confirm('Mark as shipped?')">
-                                                <i class="fas fa-truck"></i> Ship
-                                            </button>
-                                        </form>
-                                    @endif
-
-                                    @if($order->status == 'shipped')
-                                        <form action="{{ route('orders.receive', $order) }}" method="POST" style="display:inline;">
-                                            @csrf
-                                            <button class="btn-theme btn-theme-primary btn-sm"
-                                                onclick="return confirm('Mark as received?')">
-                                                <i class="fas fa-box-open"></i> Receive
-                                            </button>
-                                        </form>
-                                    @endif
-                                </td>
-                            @endif
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="{{ (auth()->user()->role === 'admin' || auth()->user()->role === 'branch_manager') ? 8 : 7 }}"
-                                class="text-center">No orders found</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        {{-- Pagination (hide disabled) --}}
+                @empty
+                    <tr>
+                        <td colspan="7" class="text-center">No orders found.</td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+        {{-- Pagination --}}
         <div class="mt-3 flex justify-between items-center">
             <div class="space-x-1">
                 @if (!$orders->onFirstPage())
@@ -141,17 +147,16 @@
             </div>
 
             <div>
-                @if($orders->total())
-                    Showing {{ $orders->firstItem() }} to {{ $orders->lastItem() }} of {{ $orders->total() }} results
-                @else
-                    Showing 0 results
-                @endif
+                Showing {{ $orders->firstItem() }} to {{ $orders->lastItem() }} of {{ $orders->total() }} results
             </div>
         </div>
+
     </div>
 
-    {{-- Styles (copied from your product page theme) --}}
+
+
     <style>
+        /* Pagination */
         .pagination {
             font-size: 0.875rem;
         }
@@ -162,7 +167,7 @@
             min-width: auto;
         }
 
-        /* Container */
+        /* Table Container */
         .table-container {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -202,19 +207,12 @@
         .btn-theme {
             padding: 8px 15px;
             border-radius: 8px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
             display: inline-flex;
             align-items: center;
             gap: 8px;
-        }
-
-        .btn-theme i {
-            margin-right: 4px;
+            transition: all 0.3s ease;
         }
 
         .btn-theme-primary {
@@ -223,18 +221,10 @@
             border: none;
         }
 
-        .btn-theme-primary:hover {
-            opacity: 0.9;
-        }
-
         .btn-theme-success {
-            background: #10b981;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
-        }
-
-        .btn-theme-success:hover {
-            opacity: 0.9;
         }
 
         .btn-theme-danger {
@@ -243,23 +233,29 @@
             border: none;
         }
 
-        .btn-theme-danger:hover {
-            opacity: 0.9;
+        .btn-sm {
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            border-radius: 6px;
         }
 
-        /* Filter Form */
-        .filter-add-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 15px;
+        .btn-xs {
+            padding: 3px 8px;
+            font-size: 0.7rem;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
+        /* Filter Forms */
+        .filter-add-container,
         .filter-form {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
+            margin-bottom: 7px;
         }
 
         .filter-form select,
@@ -275,13 +271,10 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            background: white;
-            color: #333;
         }
 
         .filter-form button,
-        .filter-form a.filter-btn,
-        .filter-btn {
+        .filter-form a.filter-btn {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
@@ -292,15 +285,11 @@
 
         .filter-form button:hover,
         .filter-form a.filter-btn:hover,
-        .filter-btn:hover {
+        .btn-theme-primary:hover,
+        .btn-theme-success:hover,
+        .btn-theme-danger:hover {
             opacity: 0.9;
         }
-
-        /* small helpers */
-        .btn-sm {
-            padding: 6px 10px;
-            font-size: 0.85rem;
-            border-radius: 6px;
-        }
     </style>
+
 @endsection

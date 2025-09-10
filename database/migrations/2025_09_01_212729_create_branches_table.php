@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->string('name');
             $table->string('location');
             $table->boolean('is_main')->default(false);
+            $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();
         });
     }

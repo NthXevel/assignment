@@ -25,7 +25,12 @@ Route::middleware(['auth'])->group(function () {
     // Product Management
     // -----------------------------
     Route::resource('products', ProductController::class);
-    Route::get('/products/category/{category}', [ProductController::class, 'byCategory'])->name('products.by-category');
+    Route::get('/products/category/{category}', [ProductController::class, 'byCategory'])
+        ->name('products.by-category');
+
+    // Category management
+    Route::post('/products/store-category', [ProductController::class, 'storeCategory'])
+        ->name('products.store-category');
 
     // -----------------------------
     // Stock Management
@@ -52,6 +57,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');
     Route::post('/orders/{order}/receive', [OrderController::class, 'receive'])->name('orders.receive');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+    Route::get('/orders/branches-with-stock', [OrderController::class, 'getBranchesWithStock'])
+        ->name('orders.branches-with-stock');
+
 
     // -----------------------------
     // User Management

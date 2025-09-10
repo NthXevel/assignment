@@ -46,18 +46,25 @@ class BranchController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'location' => 'required|string|max:255',
+            'status' => 'required|in:active,inactive',
             'is_main' => 'boolean',
         ]);
 
-        // Ensure only one main branch
-        if ($validated['is_main'] && Branch::where('is_main', true)->exists()) {
-            return back()->with('error', 'A main branch already exists');
+        // Ensure only one main branch exists
+        if ($request->has('is_main') && Branch::where('is_main', true)->exists()) {
+            return back()->withInput()
+                ->with('error', 'A main branch already exists');
         }
 
-        Branch::create($validated);
+        Branch::create([
+            'name' => $validated['name'],
+            'location' => $validated['location'],
+            'status' => $validated['status'],
+            'is_main' => $request->has('is_main'),
+        ]);
 
         return redirect()->route('branches.index')
-                         ->with('success', 'Branch created successfully');
+            ->with('success', 'Branch created successfully');
     }
 
     /**

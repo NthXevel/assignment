@@ -47,9 +47,14 @@
                             <td>#{{ $branch->id }}</td>
                             <td>
                                 {{ $branch->name }}
-                                @if(auth()->user()->role !== 'admin' && auth()->user()->role !== 'stock_manager' && auth()->user()->branch_id == $branch->id)
+                                @if($branch->id == auth()->user()->branch_id)
                                     <span class="btn-theme btn-theme-success btn-xs">
                                         <i class="fas fa-check-circle"></i> Current Branch
+                                    </span>
+                                @endif
+                                @if($branch->is_main)
+                                    <span class="btn-theme btn-theme-primary btn-xs">
+                                        <i class="fas fa-star"></i> Main Branch
                                     </span>
                                 @endif
                             </td>

@@ -19,6 +19,7 @@ return new class extends Migration {
             $table->foreignId('branch_id')->constrained();
             $table->enum('role', ['admin', 'stock_manager', 'order_creator', 'branch_manager']);
             $table->boolean('is_active')->default(false);
+            $table->enum('status', ['active', 'inactive'])->default('active'); 
             $table->rememberToken();
             $table->timestamps();
         });
