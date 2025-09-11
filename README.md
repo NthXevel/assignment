@@ -22,7 +22,7 @@ Follow these steps to set up the project locally:
     php artisan key:generate
     ```
 
-6. **Configure the database in the `.env` file** with your local credentials.
+6. **Configure the database in the `.env` file** with your local credentials. (GO in the file and change the sqllite to mysql and put what name you want for database and create it in your own computer's database) 
 
 7. **Run database migrations and seed sample data:**
 
