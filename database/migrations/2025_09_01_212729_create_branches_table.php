@@ -25,7 +25,9 @@ return new class extends Migration {
      */
     public function down(): void
     {
+        Schema::dropIfExists('stock_movements'); // first child
+        Schema::dropIfExists('stocks');          // then child
         Schema::dropIfExists('branches');
-        
+
     }
 };
