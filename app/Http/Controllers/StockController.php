@@ -15,7 +15,7 @@ class StockController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware('permission:manage_stock')->except(['index', 'show', 'lowStock']);;
+        $this->middleware('permission:manage_stock')->except(['index', 'show', 'lowStock']);
 
         // Attach low stock observer
         Stock::observe(LowStockObserver::class);
@@ -23,39 +23,45 @@ class StockController extends Controller
 
     public function index(Request $request)
     {
-        $user = auth()->user();
-        $branches = Branch::all();
-        $products = Product::where('is_active', true)->get();
         $branchFilter = $request->branch;
+        $search = $request->search;
+        $sort = $request->sort;
 
-        $query = Stock::with(['product', 'branch']);
+        $query = Stock::with(['product', 'branch'])
+            //only active products
+            ->whereHas('product', function ($q) {
+                $q->where('is_active', 1); // only active products
+            })
+            //only active branches
+            ->whereHas('branch', function ($q) {
+                $q->where('status', 'active'); // change to is_active if that's your column
+            });
 
-        // Branch filter
         if ($branchFilter) {
             $query->where('branch_id', $branchFilter);
         }
 
-        // Search filter
-        if ($request->search) {
-            $query->whereHas('product', function($q) use ($request) {
-                $q->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('sku', 'like', "%{$request->search}%");
+        if ($request->boolean('low_stock')) {
+            $query->whereColumn('quantity', '<=', 'minimum_threshold');
+        }
+
+        if ($search) {
+            $query->whereHas('product', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->where('is_active', true);
             });
         }
 
-        // Sorting
-        switch ($request->sort) {
-            case 'quantity_asc':
-                $query->orderBy('quantity', 'asc');
-                break;
-            case 'quantity_desc':
-                $query->orderBy('quantity', 'desc');
-                break;
-            default:
-                $query->orderBy('id', 'asc');
+        if ($sort === 'quantity_asc') {
+            $query->orderBy('quantity', 'asc');
+        } elseif ($sort === 'quantity_desc') {
+            $query->orderBy('quantity', 'desc');
+        } else {
+            $query->latest();
         }
 
-        $stocks = $query->paginate(20)->withQueryString();
+        $stocks = $query->paginate(10)->appends($request->query());
+        $branches = Branch::where('status', 'active')->get();
 
         return view('stocks.index', compact('stocks', 'branches', 'branchFilter'));
     }
@@ -102,35 +108,6 @@ class StockController extends Controller
         return view('stocks.show', compact('stock', 'movements'));
     }
 
-    public function edit(Stock $stock)
-    {
-        return view('stocks.edit', compact('stock'));
-    }
-
-    public function update(Request $request, Stock $stock)
-    {
-        $validated = $request->validate([
-            'quantity' => 'required|integer|min:0',
-            'minimum_threshold' => 'required|integer|min:0',
-        ]);
-
-        $oldQuantity = $stock->quantity;
-        $stock->update($validated);
-
-        // Log the quantity change
-        if ($oldQuantity != $validated['quantity']) {
-            StockMovement::create([
-                'stock_id' => $stock->id,
-                'quantity_change' => $validated['quantity'] - $oldQuantity,
-                'reason' => 'Manual adjustment by ' . auth()->user()->username,
-                'balance_after' => $validated['quantity'],
-            ]);
-        }
-
-        return redirect()->route('stocks.show', $stock)
-            ->with('success', 'Stock updated successfully');
-    }
-
     public function adjust(Request $request, Stock $stock)
     {
         $validated = $request->validate([
@@ -146,9 +123,81 @@ class StockController extends Controller
     public function lowStock()
     {
         $lowStocks = Stock::with(['product', 'branch'])
+            ->whereHas('product', function ($q) {
+                $q->where('is_active', true);
+            })
             ->whereRaw('quantity <= minimum_threshold')
             ->paginate(20);
 
         return view('stocks.low-stock', compact('lowStocks'));
+    }
+
+    /**
+     * Update stock quantity with custom amount - preserves all filters
+     */
+    public function updateQuantity(Request $request, Stock $stock)
+    {
+        $validated = $request->validate([
+            'new_quantity' => 'required|integer|min:0'
+        ]);
+
+        $oldQuantity = $stock->quantity;
+        $stock->quantity = $validated['new_quantity'];
+        $stock->save();
+
+        // Log the stock movement
+        if ($oldQuantity != $validated['new_quantity']) {
+            StockMovement::create([
+                'stock_id' => $stock->id,
+                'quantity_change' => $validated['new_quantity'] - $oldQuantity,
+                'reason' => 'Direct edit by ' . auth()->user()->username,
+                'balance_after' => $validated['new_quantity'],
+            ]);
+        }
+
+        // Preserve all filters when redirecting
+        $queryParams = $request->only(['branch', 'search', 'sort', 'page']);
+
+        return redirect()->route('stocks.index', $queryParams)
+            ->with('success', "Stock updated: {$stock->product->name} quantity changed from {$oldQuantity} to {$validated['new_quantity']}");
+    }
+
+    /**
+     * Adjust stock quantity by custom amount (+ or -)
+     */
+    public function adjustQuantity(Request $request, Stock $stock)
+    {
+        $validated = $request->validate([
+            'action' => 'required|in:increase,decrease',
+            'amount' => 'required|integer|min:1|max:1000'
+        ]);
+
+        $action = $validated['action'];
+        $amount = $validated['amount'];
+        $oldQuantity = $stock->quantity;
+
+        if ($action === 'increase') {
+            $stock->quantity += $amount;
+            $actionText = "increased by {$amount}";
+        } elseif ($action === 'decrease') {
+            $stock->quantity = max(0, $stock->quantity - $amount);
+            $actionText = "decreased by {$amount}";
+        }
+
+        $stock->save();
+
+        // Log the stock movement
+        StockMovement::create([
+            'stock_id' => $stock->id,
+            'quantity_change' => $stock->quantity - $oldQuantity,
+            'reason' => ucfirst($action) . " by {$amount} - " . auth()->user()->username,
+            'balance_after' => $stock->quantity,
+        ]);
+
+        // Preserve all filters when redirecting
+        $queryParams = $request->only(['branch', 'search', 'sort', 'page']);
+
+        return redirect()->route('stocks.index', $queryParams)
+            ->with('success', "{$stock->product->name} stock {$actionText} (from {$oldQuantity} to {$stock->quantity})");
     }
 }

@@ -1,4 +1,3 @@
-
 @extends('layouts.app')
 
 @section('content')
@@ -33,30 +32,6 @@
                                value="{{ old('location') }}" 
                                required>
                         @error('location') <span class="error">{{ $message }}</span> @enderror
-                    </div>
-
-                    <!-- Status -->
-                    <div class="form-group">
-                        <label for="status">Status</label>
-                        <select name="status" id="status" required>
-                            <option value="active" {{ old('status') == 'active' ? 'selected' : '' }}>Active</option>
-                            <option value="inactive" {{ old('status') == 'inactive' ? 'selected' : '' }}>Inactive</option>
-                        </select>
-                        @error('status') <span class="error">{{ $message }}</span> @enderror
-                    </div>
-
-                    <!-- Is Main Branch -->
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" 
-                                   name="is_main" 
-                                   id="is_main" 
-                                   value="1" 
-                                   {{ old('is_main') ? 'checked' : '' }}>
-                            <span class="checkmark"></span>
-                            Set as Main Branch
-                        </label>
-                        @error('is_main') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
                     <!-- Form Actions -->

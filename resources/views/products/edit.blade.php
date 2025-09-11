@@ -121,10 +121,14 @@
                         @error('specifications') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
-                    <!-- Actions -->
+                    <!-- Form Actions -->
                     <div class="form-actions">
-                        <button type="submit" class="btn-theme btn-theme-primary"><i class="fas fa-save"></i> Save</button>
-                        <a href="{{ route('products.index') }}" class="btn-theme btn-theme-secondary"><i class="fas fa-arrow-left"></i> Back</a>
+                        <button type="submit" class="btn-theme btn-theme-primary">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <a href="{{ route('products.index') }}" class="btn-theme btn-theme-danger">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
                     </div>
                 </form>
 
@@ -170,9 +174,13 @@
         background: #667eea;
         color: #fff;
         border: none;
-        padding: 6px 12px;
-        border-radius: 6px;
+        padding: 8px 16px;
+        border-radius: 8px;
         cursor: pointer;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
     }
     .settings-page {
         display: flex;
@@ -222,6 +230,54 @@
         color: #333;
     }
 
+    .btn-theme {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-theme-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+    .btn-theme-primary:hover {
+        background: linear-gradient(135deg, #764ba2, #667eea);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-theme-danger {
+        background: linear-gradient(135deg, #f87171, #dc2626);
+        color: white;
+    }
+
+    .btn-theme-danger:hover {
+        background: linear-gradient(135deg, #dc2626, #f87171);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+    }
+
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 0.875rem;
+    }
+
+    .remove-spec {
+        background: linear-gradient(135deg, #f87171, #dc2626);
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+    }
 </style>
 
 <script>

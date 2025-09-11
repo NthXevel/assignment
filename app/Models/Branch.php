@@ -6,8 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class Branch extends Model
 {
-    protected $fillable = ['name', 'location', 'is_main'];
+    protected $fillable = ['name', 'location', 'status', 'is_main'];
     
+    protected $attributes = [
+        'is_main' => false,
+        'status' => 'active'
+    ];
+
     public function users()
     {
         return $this->hasMany(User::class);

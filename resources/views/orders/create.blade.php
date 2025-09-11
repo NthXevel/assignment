@@ -19,12 +19,14 @@
                             <option value="">Select Product</option>
                             @foreach($products as $product)
                                 <option value="{{ $product->id }}" 
-                                        data-stocks='@json($product->stocks)'>
+                                        data-stocks='@json($product->stocks)'
+                                        data-current-branch-id="{{ auth()->user()->branch_id }}">
                                     {{ $product->name }} ({{ $product->category->name }})
                                 </option>
                             @endforeach
                         </select>
                         @error('items.0.product_id') <span class="error">{{ $message }}</span> @enderror
+                        <small id="current-branch-stock" class="current-stock-info"></small>
                     </div>
 
                     <!-- Branch -->
@@ -80,21 +82,36 @@
 </div>
 
 <script>
+// Get current branch ID (you might need to pass this from the controller)
+const currentBranchId = {{ auth()->user()->branch_id ?? 'null' }};
+
 document.getElementById('product_id').addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
     const branchSelect = document.getElementById('supplying_branch_id');
     const quantityInput = document.getElementById('quantity');
     const stockInfo = document.getElementById('available-stock');
+    const currentStockInfo = document.getElementById('current-branch-stock');
 
     if (this.value) {
         const stocks = JSON.parse(selectedOption.dataset.stocks);
         
+        // Show current branch stock
+        const currentBranchStock = stocks.find(stock => stock.branch_id == currentBranchId);
+        if (currentBranchStock) {
+            currentStockInfo.innerHTML = `<i class="fas fa-info-circle"></i> Current stock in your branch: <strong>${currentBranchStock.quantity}</strong>`;
+            currentStockInfo.className = 'current-stock-info show';
+        } else {
+            currentStockInfo.innerHTML = `<i class="fas fa-exclamation-triangle"></i> No stock available in your branch`;
+            currentStockInfo.className = 'current-stock-info show no-stock';
+        }
+        
         // Reset branch select
         branchSelect.innerHTML = '<option value="">Select a branch</option>';
         
-        // Add branches with stock information
+        // Add branches with stock information (excluding current branch)
         stocks.forEach(stock => {
-            if (stock.quantity > 0) {
+            // Exclude current branch and only show branches with stock
+            if (stock.quantity > 0 && stock.branch_id != currentBranchId) {
                 branchSelect.innerHTML += `
                     <option value="${stock.branch_id}" data-stock="${stock.quantity}">
                         ${stock.branch.name} (Available: ${stock.quantity})
@@ -102,6 +119,14 @@ document.getElementById('product_id').addEventListener('change', function() {
                 `;
             }
         });
+        
+        // Show message if no other branches have stock
+        if (branchSelect.children.length === 1) {
+            branchSelect.innerHTML += '<option value="" disabled>No other branches have this product in stock</option>';
+        }
+    } else {
+        currentStockInfo.textContent = '';
+        currentStockInfo.className = 'current-stock-info';
     }
 
     // Reset quantity input
@@ -119,6 +144,9 @@ document.getElementById('supplying_branch_id').addEventListener('change', functi
     if (available) {
         quantityInput.max = available;
         stockInfo.textContent = `Maximum available: ${available}`;
+    } else {
+        quantityInput.max = '';
+        stockInfo.textContent = '';
     }
 });
 </script>
@@ -191,6 +219,37 @@ document.getElementById('supplying_branch_id').addEventListener('change', functi
         margin-top: 4px;
         color: #666;
         font-size: 0.8rem;
+    }
+
+    .current-stock-info {
+        display: block;
+        margin-top: 8px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        opacity: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .current-stock-info.show {
+        opacity: 1;
+        max-height: 50px;
+        background: #e0f2fe;
+        color: #0277bd;
+        border: 1px solid #b3e5fc;
+    }
+
+    .current-stock-info.show.no-stock {
+        background: #fff3e0;
+        color: #f57c00;
+        border: 1px solid #ffcc02;
+    }
+
+    .current-stock-info i {
+        margin-right: 6px;
     }
 
     .error {

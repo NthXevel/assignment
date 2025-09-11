@@ -44,9 +44,11 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('permission:manage_stock')->group(function () {
         Route::get('/stocks/create', [StockController::class, 'create'])->name('stocks.create');
         Route::post('/stocks', [StockController::class, 'store'])->name('stocks.store');
-        Route::get('/stocks/{stock}/edit', [StockController::class, 'edit'])->name('stocks.edit');
-        Route::put('/stocks/{stock}', [StockController::class, 'update'])->name('stocks.update');
         Route::post('/stocks/{stock}/adjust', [StockController::class, 'adjust'])->name('stocks.adjust');
+        
+        // Simple quantity management (no edit route)
+        Route::post('/stocks/{stock}/update-quantity', [StockController::class, 'updateQuantity'])->name('stocks.update-quantity');
+        Route::post('/stocks/{stock}/adjust-quantity', [StockController::class, 'adjustQuantity'])->name('stocks.adjust-quantity');
     });
 
     // -----------------------------
@@ -60,7 +62,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/orders/branches-with-stock', [OrderController::class, 'getBranchesWithStock'])
         ->name('orders.branches-with-stock');
 
-
     // -----------------------------
     // User Management
     // -----------------------------
@@ -69,17 +70,19 @@ Route::middleware(['auth'])->group(function () {
     // -----------------------------
     // Branch Management
     // -----------------------------
-    // Public: view branches
-    Route::get('branches', [BranchController::class, 'index'])->name('branches.index');
-    Route::get('branches/{branch}', [BranchController::class, 'show'])->name('branches.show');
+    Route::middleware(['auth'])->group(function () {
+        // Admin-only: manage branches (place these first)
+        Route::middleware(['permission:manage_branches'])->group(function () {
+            Route::get('branches/create', [BranchController::class, 'create'])->name('branches.create');
+            Route::post('branches', [BranchController::class, 'store'])->name('branches.store');
+            Route::get('branches/{branch}/edit', [BranchController::class, 'edit'])->name('branches.edit');
+            Route::put('branches/{branch}', [BranchController::class, 'update'])->name('branches.update');
+            Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->name('branches.destroy');
+        });
 
-    // Admin-only: manage branches
-    Route::middleware(['permission:manage_branches'])->group(function () {
-        Route::get('branches/create', [BranchController::class, 'create'])->name('branches.create');
-        Route::post('branches', [BranchController::class, 'store'])->name('branches.store');
-        Route::get('branches/{branch}/edit', [BranchController::class, 'edit'])->name('branches.edit');
-        Route::put('branches/{branch}', [BranchController::class, 'update'])->name('branches.update');
-        Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->name('branches.destroy');
+        // Public: view branches (place these after)
+        Route::get('branches', [BranchController::class, 'index'])->name('branches.index');
+        Route::get('branches/{branch}', [BranchController::class, 'show'])->name('branches.show');
     });
 
     // -----------------------------
@@ -90,7 +93,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/stock', [App\Http\Controllers\RecordsController::class, 'stock'])->name('stock');
         Route::get('/orders', [App\Http\Controllers\RecordsController::class, 'orders'])->name('orders');
     });
-
 
     // -----------------------------
     // Settings

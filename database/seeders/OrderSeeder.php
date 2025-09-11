@@ -34,7 +34,6 @@ class OrderSeeder extends Seeder
                 'created_by' => $users->random()->id,
                 'status' => collect(['pending', 'approved', 'shipped', 'received', 'cancelled'])->random(),
                 'priority' => collect(['standard', 'urgent'])->random(),
-                'total_amount' => rand(100, 5000),
                 'notes' => fake()->sentence(),
                 'approved_at' => rand(0, 1) ? now()->subDays(rand(1, 10)) : null,
                 'shipped_at' => rand(0, 1) ? now()->subDays(rand(1, 5)) : null,

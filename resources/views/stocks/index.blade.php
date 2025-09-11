@@ -6,6 +6,19 @@
         <p class="page-subtitle">View all stock across branches</p>
     </div>
 
+    {{-- Success/Error Messages --}}
+    @if(session('success'))
+        <div class="alert alert-success">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-error">
+            {{ session('error') }}
+        </div>
+    @endif
+
     <div class="filter-add-container">
         {{-- Filter by Branch --}}
         <form method="GET" action="{{ route('stocks.index') }}" class="filter-form">
@@ -18,11 +31,15 @@
                 @endforeach
             </select>
 
-            <input type="text" 
-                   name="search" 
-                   placeholder="Search stock..." 
-                   value="{{ request('search') }}" 
-                   class="form-control">
+            <input type="text" name="search" placeholder="Search stock..." value="{{ request('search') }}"
+                class="form-control">
+
+            {{-- Low Stock Checkbox --}}
+            <label class="flex items-center gap-2">
+                <input type="checkbox" name="low_stock" value="1" {{ request('low_stock') ? 'checked' : '' }}
+                    onchange="this.form.submit()">
+                <span>Show Low Stock Only</span>
+            </label>
 
             <button type="submit" class="btn-theme btn-theme-primary">
                 <i class="fas fa-filter"></i> Filter
@@ -47,15 +64,14 @@
                         <th>
                             Quantity
                             <a href="{{ route('stocks.index', [
-                                'branch' => request('branch'),
-                                'search' => request('search'),
-                                'sort' => request('sort') === 'quantity_asc' ? 'quantity_desc' : 'quantity_asc'
-                            ]) }}" 
-                            class="btn-theme btn-theme-sort btn-sm">
-                                <i class="fas fa-sort{{ 
-                                    request('sort') === 'quantity_asc' ? '-up' : 
-                                    (request('sort') === 'quantity_desc' ? '-down' : '') 
-                                }}"></i>
+        'branch' => request('branch'),
+        'search' => request('search'),
+        'sort' => request('sort') === 'quantity_asc' ? 'quantity_desc' : 'quantity_asc'
+    ]) }}" class="btn-theme btn-theme-sort btn-sm">
+                                <i class="fas fa-sort{{
+        request('sort') === 'quantity_asc' ? '-up' :
+        (request('sort') === 'quantity_desc' ? '-down' : '')
+                                                    }}"></i>
                             </a>
                         </th>
                         <th>Cost Price (RM)</th>
@@ -67,15 +83,14 @@
                 </thead>
                 <tbody>
                     @forelse($stocks as $stock)
-                        <tr class="{{ $stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : '') }}">
+                        <tr
+                            class="{{ $stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : '') }}">
                             <td>#{{ $stock->id }}</td>
                             <td>{{ $stock->product->name ?? '-' }}</td>
                             <td>{{ $stock->branch->name ?? '-' }}</td>
                             <td>
-                                <span class="quantity-badge {{ 
-                                    $stock->quantity <= 0 ? 'zero-stock' : 
-                                    ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : 'normal-stock') 
-                                }}">
+                                <span
+                                    class="quantity-badge {{$stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : 'normal-stock')}}">
                                     {{ $stock->quantity }}
                                 </span>
                             </td>
@@ -83,11 +98,33 @@
                             <td>{{ number_format($stock->product->selling_price ?? 0, 2) }}</td>
 
                             @if(auth()->user()->role === 'admin')
-                                <td style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="{{ route('stocks.edit', $stock->id) }}" 
-                                       class="btn-theme btn-theme-primary btn-sm">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </a>
+                                {{-- Actions Cell --}}
+                                <td class="actions-cell">
+                                    {{-- Quantity Edit Form --}}
+                                    <form method="POST" action="{{ route('stocks.update-quantity', $stock) }}"
+                                        class="inline-form quantity-form">
+                                        @csrf
+                                        <div class="flex items-center gap-2">
+                                            {{-- Minus Button --}}
+                                            <button type="button" class="btn-theme btn-theme-danger btn-sm qty-minus">
+                                                <i class="fas fa-minus"></i>
+                                            </button>
+
+                                            {{-- Quantity Input --}}
+                                            <input type="number" name="new_quantity" value="{{ $stock->quantity }}" min="0"
+                                                class="quantity-input" title="Enter new quantity">
+
+                                            {{-- Plus Button --}}
+                                            <button type="button" class="btn-theme btn-theme-primary btn-sm qty-plus">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+
+                                            {{-- Confirm Submit --}}
+                                            <button type="submit" class="btn-theme btn-theme-success btn-sm">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                        </div>
+                                    </form>
                                 </td>
                             @endif
                         </tr>
@@ -100,36 +137,498 @@
             </table>
         </div>
 
-        {{-- Pagination --}}
-        <div class="mt-3 flex justify-between items-center">
-            <div class="space-x-1">
+        {{-- Enhanced Pagination --}}
+        <div class="pagination-container">
+            <div class="pagination-buttons">
                 @if (!$stocks->onFirstPage())
-                    <a href="{{ $stocks->previousPageUrl() }}" class="btn btn-primary">« Previous</a>
+                    <a href="{{ $stocks->appends(request()->query())->previousPageUrl() }}"
+                        class="btn-theme btn-theme-secondary">
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </a>
+                @endif
+
+                {{-- Page Numbers --}}
+                @if($stocks->hasPages())
+                    <div class="page-numbers">
+                        @foreach(range(1, min(5, $stocks->lastPage())) as $page)
+                            <a href="{{ $stocks->appends(request()->query())->url($page) }}"
+                                class="page-btn {{ $stocks->currentPage() == $page ? 'active' : '' }}">
+                                {{ $page }}
+                            </a>
+                        @endforeach
+
+                        @if($stocks->lastPage() > 5)
+                            <span class="dots">...</span>
+                            <a href="{{ $stocks->appends(request()->query())->url($stocks->lastPage()) }}"
+                                class="page-btn">{{ $stocks->lastPage() }}</a>
+                        @endif
+                    </div>
                 @endif
 
                 @if ($stocks->hasMorePages())
-                    <a href="{{ $stocks->nextPageUrl() }}" class="btn btn-primary">Next »</a>
+                    <a href="{{ $stocks->appends(request()->query())->nextPageUrl() }}" class="btn-theme btn-theme-secondary">
+                        Next <i class="fas fa-chevron-right"></i>
+                    </a>
                 @endif
             </div>
 
-            <div>
-                Showing {{ $stocks->firstItem() }} to {{ $stocks->lastItem() }} of {{ $stocks->total() }} results
+            <div class="pagination-info">
+                <strong>{{ $stocks->firstItem() ?: 0 }} - {{ $stocks->lastItem() ?: 0 }}</strong> of
+                <strong>{{ $stocks->total() }}</strong> stocks
+                @if(request()->has('search') && request('search'))
+                    | Filtered by: <em>"{{ request('search') }}"</em>
+                @endif
+                @if(request()->has('branch') && request('branch'))
+                    | Branch: <em>{{ $branches->find(request('branch'))->name ?? 'Unknown' }}</em>
+                @endif
             </div>
         </div>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.quantity-form').forEach(form => {
+                const minusBtn = form.querySelector('.qty-minus');
+                const plusBtn = form.querySelector('.qty-plus');
+                const input = form.querySelector('.quantity-input');
 
-    {{-- Styles --}}
+                minusBtn.addEventListener('click', () => {
+                    let value = parseInt(input.value) || 0;
+                    if (value > 0) input.value = value - 1;
+                });
+
+                plusBtn.addEventListener('click', () => {
+                    let value = parseInt(input.value) || 0;
+                    input.value = value + 1;
+                });
+            });
+        });
+    </script>
+
+
+    {{-- Enhanced CSS Styles --}}
     <style>
-        .table-container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 20px;
-            max-height: 700px;
-            overflow-y: auto;
-            box-sizing: border-box;
+        /* Alert Messages with Icons */
+        .alert {
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
+        .alert-success {
+            background: linear-gradient(135deg, #d4edda, #c3e6cb);
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .alert-error {
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+
+        /* Enhanced Table Container */
+        .table-container {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(15px);
+            border-radius: 20px;
+            padding: 25px;
+            max-height: 800px;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chart-title {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Enhanced Table */
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            padding: 12px 15px;
+            vertical-align: middle;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .table th {
+            background: linear-gradient(135deg, #f7fafc, #edf2f7);
+            font-weight: 700;
+            color: #2d3748;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Row Styling */
+        .stock-row {
+            transition: all 0.2s ease;
+        }
+
+        .stock-row:hover {
+            background-color: rgba(102, 126, 234, 0.05);
+            transform: translateX(2px);
+        }
+
+        tr.low-stock {
+            background: linear-gradient(90deg, rgba(251, 191, 36, 0.1), transparent);
+            border-left: 3px solid #f59e0b;
+        }
+
+        tr.zero-stock {
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.1), transparent);
+            border-left: 3px solid #ef4444;
+            font-weight: bold;
+        }
+
+        /* Button Themes */
+        .btn-theme {
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-theme-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .btn-theme-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .btn-theme-success {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .btn-theme-secondary {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+        .btn-theme:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-theme:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-sm {
+            padding: 6px 10px;
+            font-size: 0.8rem;
+        }
+
+        /* Actions Cell Layout */
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            min-width: 280px;
+        }
+
+        .bulk-form,
+        .direct-form {
+            display: flex;
+            align-items: center;
+        }
+
+        .bulk-controls,
+        .direct-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Input Styling */
+        .amount-input,
+        .quantity-input,
+        .direct-input {
+            width: 50px;
+            padding: 4px 6px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .direct-input {
+            width: 60px;
+            background: linear-gradient(135deg, #fef3c7, #fed7aa);
+        }
+
+        .decrease-input {
+            background: linear-gradient(135deg, #fecaca, #fca5a5);
+        }
+
+        .increase-input {
+            background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+        }
+
+        .amount-input:focus,
+        .quantity-input:focus,
+        .direct-input:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        /* Quantity Badges */
+        .quantity-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .quantity-badge.normal-stock {
+            background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+            color: #166534;
+        }
+
+        .quantity-badge.low-stock {
+            background: linear-gradient(135deg, #fef3c7, #fed7aa);
+            color: #92400e;
+        }
+
+        .quantity-badge.zero-stock {
+            background: linear-gradient(135deg, #fecaca, #fca5a5);
+            color: #991b1b;
+        }
+
+        /* Filter Container */
+        .filter-add-container {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .filter-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-form select,
+        .filter-form input {
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            min-width: 200px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .filter-form select:focus,
+        .filter-form input:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Sort Button */
+        .btn-theme-sort {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            text-decoration: none;
+            margin-left: 6px;
+        }
+
+        /* Enhanced Pagination */
+        .pagination-container {
+            margin-top: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 20px;
+            background: rgba(248, 250, 252, 0.8);
+            border-radius: 12px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .pagination-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .pagination-buttons .btn-theme {
+            min-width: 100px;
+            padding: 10px 15px;
+            font-weight: 600;
+        }
+
+        .page-numbers {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .page-btn {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .page-btn:hover,
+        .page-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+            transform: translateY(-1px);
+        }
+
+        .dots {
+            padding: 8px 4px;
+            color: #6b7280;
+        }
+
+        .pagination-info {
+            color: #4b5563;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6b7280;
+        }
+
+        .empty-state i {
+            color: #d1d5db;
+            margin-bottom: 15px;
+        }
+
+        .empty-state h4 {
+            color: #4b5563;
+            margin-bottom: 8px;
+        }
+
+        /* Warning Text */
+        .text-warning {
+            color: #f59e0b !important;
+            font-weight: 600;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .actions-cell {
+                flex-direction: column;
+                gap: 6px;
+                min-width: auto;
+            }
+
+            .bulk-controls,
+            .direct-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .filter-add-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filter-form {
+                flex-direction: column;
+            }
+
+            .filter-form select,
+            .filter-form input {
+                min-width: auto;
+                width: 100%;
+            }
+
+            .pagination-container {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .pagination-buttons {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .table-container {
+                overflow-x: auto;
+                padding: 15px;
+            }
+
+            .table {
+                min-width: 800px;
+            }
+        }
+
+        /* Utility Classes */
+        .text-center {
+            text-align: center;
+        }
+
+        .text-warning {
+            color: #f59e0b;
+        }
+
+        /* Scrollbar Styling */
         .table-container::-webkit-scrollbar {
             width: 8px;
         }
@@ -148,95 +647,28 @@
             background: rgba(102, 126, 234, 0.6);
         }
 
-        .table th,
-        .table td {
-            padding: 10px 12px;
+        /* Animation for success messages */
+        .alert {
+            animation: slideInDown 0.5s ease-out;
         }
 
-        .btn-theme {
-            padding: 8px 15px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .btn-theme-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-        }
-
-        .btn-theme-danger {
-            background: #ef4444;
-        }
-
-        .btn-theme:hover {
-            opacity: 0.9;
-        }
-
-        .filter-add-container {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .filter-form {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .filter-form select,
-        .filter-form input {
-            padding: 8px 12px;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            min-width: 200px;
-        }
-
-        .filter-form select:focus,
-        .filter-form input:focus {
+        /* Hover effects for forms */
+        .bulk-form:hover .bulk-controls,
+        .direct-form:hover .direct-controls {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             border-color: #667eea;
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
-        }
-
-        .btn-theme-sort {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 4px 8px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            text-decoration: none;
-            margin-left: 4px;
-        }
-
-        .btn-theme-sort:hover {
-            opacity: 1;
-        }
-
-        .btn-sm {
-            padding: 4px 8px;
-            font-size: 0.875rem;
-        }
-
-        th {
-            position: relative;
-            padding: 12px;
-            background: #f8fafc;
-            border-bottom: 2px solid #e2e8f0;
-            font-weight: 600;
-            text-align: left;
-            color: #1a202c;
         }
     </style>
 @endsection

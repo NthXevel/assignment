@@ -35,7 +35,7 @@ class RecordsController extends Controller
 
         // --------------- Orders query (only shipped + canceled) ---------------
         $orderQuery = Order::with(['requestingBranch', 'supplyingBranch'])
-            ->whereIn('status', ['shipped', 'canceled'])
+            ->whereIn('status', ['received', 'canceled'])
             ->latest();
 
         if ($search) {

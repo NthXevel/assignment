@@ -19,7 +19,6 @@ return new class extends Migration
             $table->foreignId('created_by')->constrained('users');
             $table->enum('status', ['pending', 'approved', 'shipped', 'received', 'cancelled']);
             $table->enum('priority', ['standard', 'urgent']);
-            $table->decimal('total_amount', 10, 2)->default(0);
             $table->text('notes')->nullable();
             $table->timestamp('approved_at')->nullable();
             $table->timestamp('shipped_at')->nullable();

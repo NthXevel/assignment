@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Factories\Products\ProductFactory;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -60,25 +61,36 @@ class ProductController extends Controller
         ]);
 
         try {
-            // Decode specifications JSON if present
-            if (!empty($validated['specifications'])) {
-                $validated['specifications'] = json_decode($validated['specifications'], true);
-            } else {
-                $validated['specifications'] = [];
-            }
+            DB::transaction(function () use ($validated, &$product) {
+                // Decode specifications JSON if present
+                if (!empty($validated['specifications'])) {
+                    $validated['specifications'] = json_decode($validated['specifications'], true);
+                } else {
+                    $validated['specifications'] = [];
+                }
 
-            // Create the product
-            $product = Product::create([
-                'name' => $validated['name'],
-                'model' => $validated['model'],
-                'sku' => $validated['sku'],
-                'category_id' => $validated['category_id'],
-                'cost_price' => round((float) $validated['cost_price'], 2),
-                'selling_price' => round((float) $validated['selling_price'], 2),
-                'description' => $validated['description'],
-                'specifications' => $validated['specifications'],
-                'is_active' => true
-            ]);
+                // Create the product
+                $product = Product::create([
+                    'name' => $validated['name'],
+                    'model' => $validated['model'],
+                    'sku' => $validated['sku'],
+                    'category_id' => $validated['category_id'],
+                    'cost_price' => round((float) $validated['cost_price'], 2),
+                    'selling_price' => round((float) $validated['selling_price'], 2),
+                    'description' => $validated['description'],
+                    'specifications' => $validated['specifications'],
+                    'is_active' => true
+                ]);
+
+                // Create stock entries for all branches with 0 quantity
+                $branches = \App\Models\Branch::all();
+                foreach ($branches as $branch) {
+                    $product->stocks()->create([
+                        'branch_id' => $branch->id,
+                        'quantity' => 0,
+                    ]);
+                }
+            });
 
             return redirect()->route('products.show', $product)
                 ->with('success', 'Product created successfully');
@@ -153,44 +165,62 @@ class ProductController extends Controller
 
     public function destroy(Product $product)
     {
-        $totalStock = $product->stocks()->sum('quantity');
+        DB::transaction(function () use ($product) {
+            $totalStock = $product->stocks()->sum('quantity');
 
-        if ($totalStock > 0) {
-            $mainBranch = \App\Models\Branch::where('is_main', true)->firstOrFail();
+            if ($totalStock > 0) {
+                $mainBranch = \App\Models\Branch::where('is_main', true)->firstOrFail();
 
-            foreach ($product->stocks as $stock) {
-                if ($stock->branch_id !== $mainBranch->id && $stock->quantity > 0) {
-                    \App\Models\Order::create([
-                        'branch_id' => $stock->branch_id,
-                        'target_branch_id' => $mainBranch->id,
-                        'product_id' => $product->id,
-                        'quantity' => $stock->quantity,
-                        'reason' => 'Product deleted, stock returned to main branch',
-                    ]);
+                foreach ($product->stocks as $stock) {
+                    if ($stock->branch_id !== $mainBranch->id && $stock->quantity > 0) {
 
-                    $mainStock = $product->stocks()
-                        ->where('branch_id', $mainBranch->id)
-                        ->first();
-
-                    if ($mainStock) {
-                        $mainStock->increment('quantity', $stock->quantity);
-                    } else {
-                        $product->stocks()->create([
-                            'branch_id' => $mainBranch->id,
-                            'quantity' => $stock->quantity,
+                        // Create a return order
+                        $order = \App\Models\Order::create([
+                            'order_number' => 'RET-' . strtoupper(uniqid()),
+                            'requesting_branch_id' => $stock->branch_id,
+                            'supplying_branch_id' => $mainBranch->id,
+                            'created_by' => auth()->id(),
+                            'status' => 'shipped', // immediately shipped
+                            'priority' => 'standard',
+                            'notes' => 'Stock return to be discontinued.',
                         ]);
-                    }
 
-                    $stock->update(['quantity' => 0]);
+                        // Add order item
+                        $order->items()->create([
+                            'product_id' => $product->id,
+                            'quantity' => $stock->quantity,
+                            'unit_price' => $product->selling_price,
+                            'total_price' => $product->selling_price * $stock->quantity,
+                        ]);
+
+                        // Update main branch stock
+                        $mainStock = $product->stocks()
+                            ->where('branch_id', $mainBranch->id)
+                            ->first();
+
+                        if ($mainStock) {
+                            $mainStock->increment('quantity', $stock->quantity);
+                        } else {
+                            $product->stocks()->create([
+                                'branch_id' => $mainBranch->id,
+                                'quantity' => $stock->quantity,
+                            ]);
+                        }
+
+                        // Clear branch stock
+                        $stock->update(['quantity' => 0]);
+                    }
                 }
             }
-        }
 
-        $product->update(['is_active' => false]);
+            // Soft delete product
+            $product->update(['is_active' => false]);
+        });
 
         return redirect()->route('products.index')
             ->with('success', 'Product removed successfully. Stock returned to main branch.');
     }
+
 
     // Add Category with auto-slug
     public function storeCategory(Request $request)

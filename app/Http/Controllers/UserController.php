@@ -26,7 +26,7 @@ class UserController extends Controller
     {
         $user = auth()->user();
 
-        $query = User::with('branch');
+        $query = User::with('branch')->where('status', 'active');
 
         if ($user->role === 'admin') {
             // Admin can filter across all branches
@@ -49,7 +49,9 @@ class UserController extends Controller
 
         $users = $query->paginate(15);
 
-        $branches = $user->role === 'admin' ? Branch::all() : Branch::where('id', $user->branch_id)->get();
+        $branches = $user->role === 'admin'
+            ? Branch::where('status', 'active')->get() // only active branches
+            : Branch::where('id', $user->branch_id)->where('status', 'active')->get();
         $roles = ['admin', 'branch_manager', 'stock_manager', 'order_creator'];
 
         return view('users.index', compact('users', 'branches', 'roles'));
@@ -63,7 +65,7 @@ class UserController extends Controller
             $branches = Branch::where('id', $user->branch_id)->get();
             $roles = ['order_creator', 'stock_manager']; // restricted roles
         } else {
-            $branches = Branch::all();
+            $branches = Branch::where('status', 'active')->get();
             $roles = ['admin', 'branch_manager', 'stock_manager', 'order_creator'];
         }
 
@@ -153,32 +155,48 @@ class UserController extends Controller
             ->with('success', 'User updated successfully');
     }
 
+    public function show(User $user)
+    {
+        return view('users.show', compact('user'));
+    }
+
     public function destroy(User $user)
     {
         $currentUser = auth()->user();
 
         if ($user->id === $currentUser->id) {
-            return back()->with('error', 'Cannot delete your own account');
+            return back()->with('error', 'Cannot deactivate your own account');
         }
 
         if ($currentUser->role === 'branch_manager') {
             if ($user->branch_id !== $currentUser->branch_id) {
-                return back()->with('error', 'You can only delete users from your own branch');
+                return back()->with('error', 'You can only deactivate users from your own branch');
             }
             if (!in_array($user->role, ['order_creator', 'stock_manager'])) {
-                return back()->with('error', 'You can only delete stock managers and order creators');
+                return back()->with('error', 'You can only deactivate stock managers and order creators');
             }
         }
 
-        if ($user->orders()->exists()) {
-            return back()->with('error', 'Cannot delete user with order history');
+        // ✅ Prevent removing last branch manager
+        if ($user->role === 'branch_manager') {
+            $managerCount = User::where('branch_id', $user->branch_id)
+                ->where('role', 'branch_manager')
+                ->where('status', 'active')
+                ->count();
+
+            if ($managerCount <= 1) {
+                return back()->with('error', 'Each branch must have at least one branch manager');
+            }
         }
 
-        $user->delete();
+        // Instead of deleting, set status = inactive
+        $user->status = 'inactive';
+        $user->save();
 
         return redirect()->route('users.index')
-            ->with('success', 'User deleted successfully');
+            ->with('success', 'User deactivated successfully');
     }
+
 
     public function profile()
     {

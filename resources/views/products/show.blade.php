@@ -65,11 +65,16 @@
                     </div>
 
 
-                    <!-- Back Button -->
+                    <!-- Actions -->
                     <div class="form-actions">
-                        <a href="{{ route('products.index') }}" class="btn-theme btn-theme-primary">
-                            <i class="fas fa-arrow-left"></i> Back
+                        <a href="{{ route('products.index') }}" class="btn-theme btn-theme-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to List
                         </a>
+                        @if(auth()->user()->role === 'admin')
+                            <a href="{{ route('products.edit', $product) }}" class="btn-theme btn-theme-primary">
+                                <i class="fas fa-edit"></i> Edit Product
+                            </a>
+                        @endif
                     </div>
 
                 </div>
@@ -149,10 +154,47 @@
             list-style: disc inside;
         }
 
+        .btn-theme {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-theme-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-theme-primary:hover {
+            background: linear-gradient(135deg, #764ba2, #667eea);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-theme-secondary {
+            background: linear-gradient(135deg, #6B7280, #4B5563);
+            color: white;
+        }
+
+        .btn-theme-secondary:hover {
+            background: linear-gradient(135deg, #4B5563, #6B7280);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(75, 85, 99, 0.3);
+        }
+
         .form-actions {
             display: flex;
             gap: 10px;
             margin-top: 20px;
+            justify-content: flex-start;
+            align-items: center;
         }
     </style>
 @endsection

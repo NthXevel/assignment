@@ -18,7 +18,6 @@ class Order extends Model
         'created_by',
         'status',
         'priority',
-        'total_amount',
         'notes',
         'approved_at',
         'shipped_at',
@@ -151,5 +150,10 @@ class Order extends Model
     public function setOrderNumberAttribute($value)
     {
         $this->attributes['order_number'] = Crypt::encryptString($value);
+    }
+    // 🔹 Dynamic total amount (calculated from items)
+    public function getTotalAmountAttribute()
+    {
+        return $this->items->sum('total_price');
     }
 }

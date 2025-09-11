@@ -7,14 +7,19 @@ use Illuminate\Http\Request;
 use App\Models\Branch;
 use App\Models\Stock;
 use Illuminate\Support\Facades\DB;
+use App\Models\Order;
 
 class BranchController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth');
-        // Only admin can manage branches
-        $this->middleware('permission:manage_branches')->only(['create', 'store', 'edit', 'update', 'destroy']);
+        $this->middleware(function ($request, $next) {
+            if (auth()->user()->role !== 'admin') {
+                abort(403, 'Unauthorized action.');
+            }
+            return $next($request);
+        })->only(['create', 'store', 'edit', 'update', 'destroy']);
     }
 
     /**
@@ -24,8 +29,10 @@ class BranchController extends Controller
     {
         $user = auth()->user();
 
-        // Everyone can see all branches
-        $branches = Branch::withCount(['users', 'stocks'])->paginate(10);
+        // Only show branches with status = 'active'
+        $branches = Branch::where('status', 'active')
+            ->withCount(['users', 'stocks'])
+            ->paginate(10);
 
         return view('branches.index', compact('branches', 'user'));
     }
@@ -46,26 +53,42 @@ class BranchController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'location' => 'required|string|max:255',
-            'status' => 'required|in:active,inactive',
-            'is_main' => 'boolean',
         ]);
 
-        // Ensure only one main branch exists
-        if ($request->has('is_main') && Branch::where('is_main', true)->exists()) {
-            return back()->withInput()
-                ->with('error', 'A main branch already exists');
+        // Add default values for status and is_main
+        $branchData = array_merge($validated, [
+            'status' => 'active',
+            'is_main' => false
+        ]);
+
+        try {
+            DB::transaction(function () use ($branchData) {
+                // Create the branch
+                $branch = Branch::create($branchData);
+
+                // Fetch all products
+                $products = \App\Models\Product::all();
+
+                // Create stock entries for each product with quantity = 0
+                foreach ($products as $product) {
+                    Stock::create([
+                        'product_id' => $product->id,
+                        'branch_id' => $branch->id,
+                        'quantity' => 0,
+                    ]);
+                }
+            });
+
+            return redirect()
+                ->route('branches.index')
+                ->with('success', 'Branch created successfully with stock initialized for all products.');
+        } catch (\Exception $e) {
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'Failed to create branch: ' . $e->getMessage()]);
         }
-
-        Branch::create([
-            'name' => $validated['name'],
-            'location' => $validated['location'],
-            'status' => $validated['status'],
-            'is_main' => $request->has('is_main'),
-        ]);
-
-        return redirect()->route('branches.index')
-            ->with('success', 'Branch created successfully');
     }
+
 
     /**
      * Show branch details
@@ -92,40 +115,85 @@ class BranchController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'location' => 'required|string|max:255',
-            'is_main' => 'boolean',
         ]);
 
-        // Ensure only one main branch
-        if ($validated['is_main'] && $branch->id !== Branch::where('is_main', true)->first()?->id) {
-            if (Branch::where('is_main', true)->exists()) {
-                return back()->with('error', 'A main branch already exists');
-            }
+        try {
+            // Preserve existing is_main and status values
+            $validated['is_main'] = $branch->is_main;
+            $validated['status'] = $branch->status;
+
+            $branch->update($validated);
+
+            return redirect()
+                ->route('branches.index')
+                ->with('success', 'Branch updated successfully');
+        } catch (\Exception $e) {
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'Failed to update branch: ' . $e->getMessage()]);
         }
-
-        $branch->update($validated);
-
-        return redirect()->route('branches.show', $branch)
-                         ->with('success', 'Branch updated successfully');
     }
 
     /**
      * Delete branch and related stocks (admin only)
      */
-    public function destroy(Branch $branch)
+    public function destroy($id)
     {
+        $branch = Branch::with(['stocks', 'users'])->findOrFail($id);
+
         if ($branch->is_main) {
-            return back()->with('error', 'Cannot delete the main branch');
+            return back()->withErrors(['error' => 'The main branch cannot be deactivated.']);
         }
 
         DB::transaction(function () use ($branch) {
-            // Delete all related stocks
-            Stock::where('branch_id', $branch->id)->delete();
+            // Get the main branch
+            $mainBranch = Branch::where('is_main', true)->firstOrFail();
 
-            // Delete the branch
-            $branch->delete();
+            foreach ($branch->stocks as $stock) {
+                if ($stock->quantity > 0) {
+                    // 1. Create a new order for this product
+                    $order = Order::create([
+                        'order_number' => 'ORD-RETURN-' . strtoupper(uniqid()),
+                        'requesting_branch_id' => $mainBranch->id, // main branch receives
+                        'supplying_branch_id' => $branch->id,    // closing branch supplies
+                        'created_by' => auth()->id(),
+                        'status' => 'received',     // auto-mark as received
+                        'priority' => 'urgent',
+                        'notes' => "Auto-return of {$stock->product->name} due to branch deactivation",
+                    ]);
+
+                    // 2. Add the single order item for this stock
+                    $order->items()->create([
+                        'product_id' => $stock->product_id,
+                        'quantity' => $stock->quantity,
+                        'unit_price' => $stock->product->selling_price ?? 0,
+                        'total_price' => ($stock->product->selling_price ?? 0) * $stock->quantity,
+                    ]);
+
+                    // 3. Transfer stock to main branch
+                    $mainStock = Stock::firstOrCreate(
+                        [
+                            'branch_id' => $mainBranch->id,
+                            'product_id' => $stock->product_id,
+                        ],
+                        ['quantity' => 0]
+                    );
+
+                    $mainStock->increment('quantity', $stock->quantity);
+
+                    // 4. Clear stock in closing branch
+                    $stock->update(['quantity' => 0]);
+                }
+            }
+
+            // 5. Deactivate all users in this branch
+            $branch->users()->update(['status' => 'inactive']);
+
+            // 6. Deactivate the branch
+            $branch->update(['status' => 'inactive']);
         });
 
         return redirect()->route('branches.index')
-                         ->with('success', 'Branch and all related stocks deleted successfully');
+            ->with('success', 'Branch deactivated. All stock returned to main branch via multiple orders. Users set inactive.');
     }
 }

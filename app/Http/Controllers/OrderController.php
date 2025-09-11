@@ -20,12 +20,13 @@ class OrderController extends Controller
         $this->middleware('auth');
     }
 
-    // List orders
+    // List orders - Updated to show latest first
     public function index(Request $request)
     {
         $user = auth()->user();
 
         $query = Order::with(['requestingBranch', 'supplyingBranch', 'creator'])
+            ->orderBy('created_at', 'desc') // Show latest orders first
             ->when($user->role !== 'admin', function ($q) use ($user) {
                 $q->where('requesting_branch_id', $user->branch_id)
                     ->orWhere('supplying_branch_id', $user->branch_id);
@@ -55,7 +56,7 @@ class OrderController extends Controller
             });
         }
 
-        $orders = $query->orderBy('created_at', 'desc')->paginate(10)->withQueryString();
+        $orders = $query->paginate(10)->withQueryString();
         $branches = $user->role === 'admin' ? Branch::orderBy('name')->get() : collect();
 
         return view('orders.index', compact('orders', 'branches'));
@@ -66,41 +67,67 @@ class OrderController extends Controller
     {
         $products = Product::with(['category', 'stocks.branch'])->get();
         $branches = Branch::where('status', 'active')->get();
-        
+
         return view('orders.create', compact('products', 'branches'));
     }
 
     public function store(Request $request)
     {
+        // Updated validation to match the form structure
         $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
+            'items.0.product_id' => 'required|exists:products,id',
+            'items.0.quantity' => 'required|integer|min:1',
             'supplying_branch_id' => 'required|exists:branches,id',
-            'notes' => 'nullable|string',
+            'priority' => 'required|in:standard,urgent',
+            'notes' => 'nullable|string|max:1000',
         ]);
 
-        $product = Product::findOrFail($request->product_id);
+        // Check if user has a branch_id
+        if (!auth()->user()->branch_id) {
+            return back()->withErrors(['error' => 'User must be assigned to a branch to create orders.']);
+        }
 
-        // Create Order
-        $order = Order::create([
-            'order_number' => 'ORD-' . strtoupper(uniqid()),
-            'requesting_branch_id' => auth()->user()->branch_id,
-            'supplying_branch_id' => $request->supplying_branch_id,
-            'created_by' => auth()->id(),
-            'status' => 'pending',
-            'priority' => 'normal',
-            'total_amount' => $product->price * $request->quantity,
-            'notes' => $request->notes,
-        ]);
+        // Check if supplying branch is different from requesting branch
+        if ($request->supplying_branch_id == auth()->user()->branch_id) {
+            return back()->withErrors(['supplying_branch_id' => 'Cannot request from your own branch.']);
+        }
 
-        // Add Order Item (single product)
-        $order->items()->create([
-            'product_id' => $product->id,
-            'quantity' => $request->quantity,
-            'price' => $product->price * $request->quantity,
-        ]);
+        $product = Product::findOrFail($request->items[0]['product_id']);
+        $quantity = (int) $request->items[0]['quantity'];
 
-        return redirect()->route('orders.show', $order->id)
+        // Check stock availability
+        $stock = Stock::where('product_id', $product->id)
+            ->where('branch_id', $request->supplying_branch_id)
+            ->first();
+
+        if (!$stock || $stock->quantity < $quantity) {
+            return back()->withErrors([
+                'items.0.quantity' => 'Insufficient stock available. Available: ' . ($stock ? $stock->quantity : 0)
+            ]);
+        }
+
+        DB::transaction(function () use ($request, $product, $quantity) {
+            // Create Order
+            $order = Order::create([
+                'order_number' => 'ORD-' . strtoupper(uniqid()),
+                'requesting_branch_id' => auth()->user()->branch_id,
+                'supplying_branch_id' => $request->supplying_branch_id,
+                'created_by' => auth()->id(),
+                'status' => 'pending',
+                'priority' => $request->priority,
+                'notes' => $request->notes,
+            ]);
+
+            // Add Order Item (single product)
+            $order->items()->create([
+                'product_id' => $product->id,
+                'quantity' => $quantity,
+                'unit_price' => $product->selling_price,
+                'total_price' => $product->selling_price * $quantity,
+            ]);
+        });
+
+        return redirect()->route('orders.index')
             ->with('success', 'Order created successfully!');
     }
 
@@ -120,7 +147,6 @@ class OrderController extends Controller
         return view('orders.show', compact('order'));
     }
 
-
     // Approve order
     public function approve(Order $order)
     {
@@ -128,25 +154,30 @@ class OrderController extends Controller
             return back()->with('error', 'Only pending orders can be approved');
         }
 
-        DB::transaction(function () use ($order) {
-            foreach ($order->items as $item) {
-                $stock = Stock::where('product_id', $item->product_id)
-                    ->where('branch_id', $order->supplying_branch_id)
-                    ->lockForUpdate()
-                    ->first();
+        try {
+            DB::transaction(function () use ($order) {
+                foreach ($order->items as $item) {
+                    $stock = Stock::where('product_id', $item->product_id)
+                        ->where('branch_id', $order->supplying_branch_id)
+                        ->lockForUpdate()
+                        ->first();
 
-                if (!$stock || $stock->quantity < $item->quantity) {
-                    throw new \Exception("Insufficient stock for {$item->product->name}");
+                    if (!$stock || $stock->quantity < $item->quantity) {
+                        throw new \Exception("Insufficient stock for {$item->product->name}. Available: " . ($stock ? $stock->quantity : 0));
+                    }
+
+                    // Don't reduce stock yet - only reserve it
+                    $stock->decrement('quantity', $item->quantity);
                 }
 
-                $stock->decrement('quantity', $item->quantity);
-            }
+                $order->status = 'approved';
+                $order->save();
+            });
 
-            $order->status = 'approved';
-            $order->save();
-        });
-
-        return back()->with('success', 'Order approved!');
+            return back()->with('success', 'Order approved successfully!');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     // Ship order
@@ -156,10 +187,14 @@ class OrderController extends Controller
             return back()->with('error', 'Order must be approved before shipping');
         }
 
+        if (auth()->user()->branch_id !== $order->supplying_branch_id) {
+            abort(403, 'Only the requesting branch can receive this order.');
+        }
+
         $order->status = 'shipped';
         $order->save();
 
-        return back()->with('success', 'Order shipped!');
+        return back()->with('success', 'Order shipped successfully!');
     }
 
     // Receive order
@@ -170,23 +205,30 @@ class OrderController extends Controller
         }
 
         if (auth()->user()->branch_id !== $order->requesting_branch_id) {
-            abort(403);
+            abort(403, 'Only the requesting branch can receive this order.');
         }
 
-        DB::transaction(function () use ($order) {
-            foreach ($order->items as $item) {
-                $stock = Stock::firstOrCreate(
-                    ['product_id' => $item->product_id, 'branch_id' => $order->requesting_branch_id],
-                    ['quantity' => 0]
-                );
-                $stock->increment('quantity', $item->quantity);
-            }
+        try {
+            DB::transaction(function () use ($order) {
+                foreach ($order->items as $item) {
+                    $stock = Stock::firstOrCreate(
+                        [
+                            'product_id' => $item->product_id,
+                            'branch_id' => $order->requesting_branch_id
+                        ],
+                        ['quantity' => 0]
+                    );
+                    $stock->increment('quantity', $item->quantity);
+                }
 
-            $order->status = 'received';
-            $order->save();
-        });
+                $order->status = 'received';
+                $order->save();
+            });
 
-        return back()->with('success', 'Order received!');
+            return back()->with('success', 'Order received successfully!');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to receive order: ' . $e->getMessage());
+        }
     }
 
     // Cancel order
@@ -196,22 +238,30 @@ class OrderController extends Controller
             return back()->with('error', 'Cannot cancel shipped or received orders');
         }
 
-        DB::transaction(function () use ($order) {
-            if ($order->status === 'approved') {
-                foreach ($order->items as $item) {
-                    $stock = Stock::where('product_id', $item->product_id)
-                        ->where('branch_id', $order->supplying_branch_id)
-                        ->lockForUpdate()
-                        ->first();
-                    if ($stock)
-                        $stock->increment('quantity', $item->quantity);
-                }
-            }
-            $order->status = 'cancelled';
-            $order->save();
-        });
+        try {
+            DB::transaction(function () use ($order) {
+                // If order was approved, restore stock
+                if ($order->status === 'approved') {
+                    foreach ($order->items as $item) {
+                        $stock = Stock::where('product_id', $item->product_id)
+                            ->where('branch_id', $order->supplying_branch_id)
+                            ->lockForUpdate()
+                            ->first();
 
-        return back()->with('success', 'Order cancelled!');
+                        if ($stock) {
+                            $stock->increment('quantity', $item->quantity);
+                        }
+                    }
+                }
+
+                $order->status = 'cancelled';
+                $order->save();
+            });
+
+            return back()->with('success', 'Order cancelled successfully!');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to cancel order: ' . $e->getMessage());
+        }
     }
 
     // Fetch branches with stock for a given product
@@ -221,9 +271,12 @@ class OrderController extends Controller
             'product_id' => 'required|exists:products,id',
         ]);
 
+        $currentBranchId = auth()->user()->branch_id;
+
         $branches = Stock::with('branch')
             ->where('product_id', $request->product_id)
             ->where('quantity', '>', 0)
+            ->where('branch_id', '!=', $currentBranchId) // Exclude current branch
             ->get()
             ->map(function ($stock) {
                 return [

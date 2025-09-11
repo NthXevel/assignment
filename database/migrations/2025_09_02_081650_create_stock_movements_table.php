@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('stock_movements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('stock_id')->constrained()->onDelete('cascade');
+            
             $table->integer('quantity_change'); // positive for inflow, negative for outflow
             $table->string('reason')->nullable(); // explanation of movement
             $table->integer('balance_after'); // balance after movement
