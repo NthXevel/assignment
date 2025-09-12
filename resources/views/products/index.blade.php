@@ -39,18 +39,36 @@
             <a href="{{ route('products.create') }}" class="btn-theme btn-theme-primary">
                 <i class="fas fa-plus"></i> Add Product
             </a>
+        @endif
+    </div>
 
-            {{-- Add Category (inline form) --}}
+    {{-- Admin: Add Category and Create Factory actions below --}}
+    @if(auth()->user()->role === 'admin')
+        <div class="filter-add-container" style="margin-top: 12px;">
             <form method="POST" action="{{ route('products.store-category') }}" class="filter-form">
                 @csrf
                 <input type="text" name="name" placeholder="New category..." required>
                 <input type="text" name="description" placeholder="Description (optional)">
+                <select name="factory_type" required>
+                    <option value="">Factory type...</option>
+                    <option value="smartphones-accessories">Smartphones & Accessories</option>
+                    <option value="computers-peripherals">Computers & Peripherals</option>
+                    <option value="home-entertainment">Home Entertainment</option>
+                    <option value="wearables-smart-devices">Wearables & Smart Devices</option>
+                </select>
                 <button type="submit" class="btn-theme btn-theme-primary">
                     <i class="fas fa-plus"></i> Add Category
                 </button>
             </form>
-        @endif
-    </div>
+
+            <a href="{{ route('factories.create') }}" class="btn-theme btn-theme-secondary">
+                <i class="fas fa-industry"></i> Create Factory
+            </a>
+            <a href="{{ route('factories.index') }}" class="btn-theme btn-theme-secondary">
+                <i class="fas fa-list"></i> Factory Index
+            </a>
+        </div>
+    @endif
 
     <div class="table-container">
         <h3 class="chart-title"><i class="fas fa-mobile-alt"></i> All Products</h3>

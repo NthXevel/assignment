@@ -6,17 +6,19 @@
         <p class="page-subtitle">Manage and view all company branches</p>
     </div>
 
-    <div class="filter-add-container">
-        {{-- Filter Form --}}
-        <form method="GET" action="{{ route('branches.index') }}" class="filter-form">
-            {{-- Only Admin can Add Branch --}}
-            @if(auth()->user()->role === 'admin')
+    @if(auth()->user()->role === 'admin')
+        <div class="filter-add-container">
+            {{-- Filter Form --}}
+            <form method="GET" action="{{ route('branches.index') }}" class="filter-form">
+                {{-- Only Admin can Add Branch --}}
+
                 <a href="{{ route('branches.create') }}" class="btn-theme btn-theme-primary">
                     <i class="fas fa-plus-circle"></i> Add New Branch
                 </a>
-            @endif
-        </form>
-    </div>
+
+            </form>
+        </div>
+    @endif
 
     <div class="table-container">
         <h3 class="chart-title"><i class="fas fa-store"></i> All Branches</h3>

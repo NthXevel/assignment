@@ -24,7 +24,9 @@ class DashboardController extends Controller
         
         $stats = [
             'total_products' => Product::where('is_active', true)->count(),
-            'low_stock_items' => Stock::whereRaw('quantity <= minimum_threshold')->count(),
+            'low_stock_items' => Stock::whereRaw('quantity <= minimum_threshold')
+                ->where('branch_id', $user->branch_id)
+                ->count(),
             'pending_orders' => Order::where('status', 'pending')->count(),
             'total_branches' => Branch::count(),
         ];
@@ -33,7 +35,7 @@ class DashboardController extends Controller
         if (!$user->hasPermission('*')) {
             $stats['branch_stock_value'] = Stock::where('branch_id', $user->branch_id)
                 ->join('products', 'stocks.product_id', '=', 'products.id')
-                ->sum(DB::raw('stocks.quantity * products.cost_price'));
+                ->sum(DB::raw('stocks.quantity * products.selling_price'));
                 
             $stats['branch_orders_this_month'] = Order::where('requesting_branch_id', $user->branch_id)
                 ->whereMonth('created_at', now()->month)
@@ -54,9 +56,7 @@ class DashboardController extends Controller
         
         $lowStockItems = Stock::with(['product', 'branch'])
             ->whereRaw('quantity <= minimum_threshold')
-            ->when(!$user->hasPermission('*'), function($q) use ($user) {
-                $q->where('branch_id', $user->branch_id);
-            })
+            ->where('branch_id', $user->branch_id)
             ->orderBy('quantity', 'asc')
             ->limit(5)
             ->get();

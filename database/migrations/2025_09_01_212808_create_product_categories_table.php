@@ -16,7 +16,14 @@ return new class extends Migration
             $table->string('name');
             $table->string('slug')->unique();
             $table->text('description')->nullable();
-            $table->enum('status', ['active', 'inactive'])->default('active'); 
+            $table->enum('status', ['active', 'inactive'])->default('active');
+            $table->enum('factory_type', [
+                'smartphones-accessories',
+                'computers-peripherals',
+                'home-entertainment',
+                'wearables-smart-devices',
+                'generic'
+            ])->default('generic');
             $table->timestamps();
         });
     }

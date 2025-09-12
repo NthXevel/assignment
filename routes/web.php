@@ -10,6 +10,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\RecordsController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\FactoryController;
 
 Route::get('/', function () {
     return redirect()->route('dashboard');
@@ -28,9 +29,20 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/products/category/{category}', [ProductController::class, 'byCategory'])
         ->name('products.by-category');
 
-    // Category management
-    Route::post('/products/store-category', [ProductController::class, 'storeCategory'])
+    // Factory-based category management
+    Route::get('/products/categories/create', [ProductController::class, 'createCategory'])
+        ->name('products.create-category');
+    Route::post('/products/categories', [ProductController::class, 'storeCategory'])
         ->name('products.store-category');
+
+    Route::middleware(['auth', 'permission:manage_products'])->group(function () {
+        Route::get('/factories', [FactoryController::class, 'index'])->name('factories.index');
+        Route::get('/factories/create', [FactoryController::class, 'create'])->name('factories.create');
+        Route::post('/factories', [FactoryController::class, 'store'])->name('factories.store');
+        Route::get('/factories/{factoryName}/edit', [FactoryController::class, 'edit'])->name('factories.edit');
+        Route::put('/factories/{factoryName}', [FactoryController::class, 'update'])->name('factories.update');
+        Route::delete('/factories/{factoryName}', [FactoryController::class, 'destroy'])->name('factories.destroy');
+    });
 
     // -----------------------------
     // Stock Management
@@ -45,7 +57,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/stocks/create', [StockController::class, 'create'])->name('stocks.create');
         Route::post('/stocks', [StockController::class, 'store'])->name('stocks.store');
         Route::post('/stocks/{stock}/adjust', [StockController::class, 'adjust'])->name('stocks.adjust');
-        
+
         // Simple quantity management (no edit route)
         Route::post('/stocks/{stock}/update-quantity', [StockController::class, 'updateQuantity'])->name('stocks.update-quantity');
         Route::post('/stocks/{stock}/adjust-quantity', [StockController::class, 'adjustQuantity'])->name('stocks.adjust-quantity');

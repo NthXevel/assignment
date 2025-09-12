@@ -1,214 +1,90 @@
 @extends('layouts.app')
 
+@section('title', 'Product Factories')
+
 @section('content')
-    <div class="page-title">
-        <h1>Stock Management</h1>
-        <p class="page-subtitle">View all stock across branches</p>
-    </div>
-
-    {{-- Success/Error Messages --}}
-    @if(session('success'))
-        <div class="alert alert-success">
-            {{ session('success') }}
+<div class="settings-page">
+    <div class="settings-container">
+        <div class="page-title" style="margin-bottom: 15px;">
+            <h1>Product Factories</h1>
+            <p class="page-subtitle">Manage product factory classes and their specifications</p>
         </div>
-    @endif
 
-    @if(session('error'))
-        <div class="alert alert-error">
-            {{ session('error') }}
+        <div class="filter-add-container" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+            <div></div>
+            <a href="{{ route('factories.create') }}" class="btn-theme btn-theme-primary">
+                <i class="fas fa-plus"></i> Create Factory
+            </a>
         </div>
-    @endif
 
-    <div class="filter-add-container">
-        {{-- Filter by Branch --}}
-        <form method="GET" action="{{ route('stocks.index') }}" class="filter-form">
-            <select name="branch" onchange="this.form.submit()" class="form-control">
-                <option value="">-- All Branches --</option>
-                @foreach($branches as $branch)
-                    <option value="{{ $branch->id }}" {{ $branchFilter == $branch->id ? 'selected' : '' }}>
-                        {{ $branch->name }}
-                    </option>
+        @if(session('success'))
+            <div class="alert alert-success" style="margin-bottom: 15px;">{{ session('success') }}</div>
+        @endif
+
+        @if($errors->any())
+            <div class="alert alert-error" style="margin-bottom: 15px;">
+                @foreach($errors->all() as $error)
+                    <p>{{ $error }}</p>
                 @endforeach
-            </select>
+            </div>
+        @endif
 
-            <input type="text" name="search" placeholder="Search stock..." value="{{ request('search') }}"
-                class="form-control">
-
-            {{-- Low Stock Toggle --}}
-            <label class="low-stock-toggle">
-                <input type="checkbox" name="low_stock" value="1" {{ request('low_stock') ? 'checked' : '' }} onchange="this.form.submit()">
-                <span class="toggle-pill">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    Low Stock Only
-                </span>
-            </label>
-
-            <button type="submit" class="btn-theme btn-theme-primary">
-                <i class="fas fa-filter"></i> Filter
-            </button>
-
-            {{-- Preserve sort parameter if it exists --}}
-            @if(request('sort'))
-                <input type="hidden" name="sort" value="{{ request('sort') }}">
-            @endif
-        </form>
-    </div>
-
-    <div class="table-container">
-        <h3 class="chart-title"><i class="fas fa-warehouse"></i> All Stock</h3>
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Product</th>
-                        <th>Branch</th>
-                        <th>
-                            Quantity
-                            <a href="{{ route('stocks.index', [
-        'branch' => request('branch'),
-        'search' => request('search'),
-        'sort' => request('sort') === 'quantity_asc' ? 'quantity_desc' : 'quantity_asc'
-    ]) }}" class="btn-theme btn-theme-sort btn-sm">
-                                <i class="fas fa-sort{{
-        request('sort') === 'quantity_asc' ? '-up' :
-        (request('sort') === 'quantity_desc' ? '-down' : '')
-                                                    }}"></i>
-                            </a>
-                        </th>
-                        <th>Cost Price (RM)</th>
-                        <th>Selling Price (RM)</th>
-                        @if(auth()->user()->role === 'admin')
-                            <th>Actions</th>
-                        @endif
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($stocks as $stock)
-                        <tr
-                            class="{{ $stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : '') }}">
-                            <td>#{{ $stock->id }}</td>
-                            <td>{{ $stock->product->name ?? '-' }}</td>
-                            <td>{{ $stock->branch->name ?? '-' }}</td>
-                            <td>
-                                <span
-                                    class="quantity-badge {{$stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : 'normal-stock')}}">
-                                    {{ $stock->quantity }}
-                                </span>
-                            </td>
-                            <td>{{ number_format($stock->product->cost_price ?? 0, 2) }}</td>
-                            <td>{{ number_format($stock->product->selling_price ?? 0, 2) }}</td>
-
-                            @if(auth()->user()->role === 'admin')
-                                {{-- Actions Cell --}}
-                                <td class="actions-cell">
-                                    {{-- Quantity Edit Form --}}
-                                    <form method="POST" action="{{ route('stocks.update-quantity', $stock) }}"
-                                        class="inline-form quantity-form">
-                                        @csrf
-                                        <div class="flex items-center gap-2">
-                                            {{-- Minus Button --}}
-                                            <button type="button" class="btn-theme btn-theme-danger btn-sm qty-minus">
-                                                <i class="fas fa-minus"></i>
-                                            </button>
-
-                                            {{-- Quantity Input --}}
-                                            <input type="number" name="new_quantity" value="{{ $stock->quantity }}" min="0"
-                                                class="quantity-input" title="Enter new quantity">
-
-                                            {{-- Plus Button --}}
-                                            <button type="button" class="btn-theme btn-theme-primary btn-sm qty-plus">
-                                                <i class="fas fa-plus"></i>
-                                            </button>
-
-                                            {{-- Confirm Submit --}}
-                                            <button type="submit" class="btn-theme btn-theme-success btn-sm">
-                                                <i class="fas fa-check"></i>
-                                            </button>
+        <div class="table-container">
+            <h3 class="chart-title"><i class="fas fa-industry"></i> All Factories</h3>
+            @if($factories->count() > 0)
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($factories as $factory)
+                                <tr>
+                                    <td>
+                                        <div style="display:flex; align-items:center; gap:8px;">
+                                            <i class="fas fa-industry" style="color:#667eea"></i>
+                                            <div>
+                                                <div style="font-weight:600; color:#2d3748;">{{ $factory['name'] }}</div>
+                                                <div style="font-size:12px; color:#6b7280;">{{ basename($factory['path']) }}</div>
+                                            </div>
                                         </div>
-                                    </form>
-                                </td>
-                            @endif
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="7" class="text-center">No stock found</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        {{-- Enhanced Pagination --}}
-        <div class="pagination-container">
-            <div class="pagination-buttons">
-                @if (!$stocks->onFirstPage())
-                    <a href="{{ $stocks->appends(request()->query())->previousPageUrl() }}"
-                        class="btn-theme btn-theme-secondary">
-                        <i class="fas fa-chevron-left"></i> Previous
-                    </a>
-                @endif
-
-                {{-- Page Numbers --}}
-                @if($stocks->hasPages())
-                    <div class="page-numbers">
-                        @foreach(range(1, min(5, $stocks->lastPage())) as $page)
-                            <a href="{{ $stocks->appends(request()->query())->url($page) }}"
-                                class="page-btn {{ $stocks->currentPage() == $page ? 'active' : '' }}">
-                                {{ $page }}
-                            </a>
-                        @endforeach
-
-                        @if($stocks->lastPage() > 5)
-                            <span class="dots">...</span>
-                            <a href="{{ $stocks->appends(request()->query())->url($stocks->lastPage()) }}"
-                                class="page-btn">{{ $stocks->lastPage() }}</a>
-                        @endif
-                    </div>
-                @endif
-
-                @if ($stocks->hasMorePages())
-                    <a href="{{ $stocks->appends(request()->query())->nextPageUrl() }}" class="btn-theme btn-theme-secondary">
-                        Next <i class="fas fa-chevron-right"></i>
-                    </a>
-                @endif
-            </div>
-
-            <div class="pagination-info">
-                <strong>{{ $stocks->firstItem() ?: 0 }} - {{ $stocks->lastItem() ?: 0 }}</strong> of
-                <strong>{{ $stocks->total() }}</strong> stocks
-                @if(request()->has('search') && request('search'))
-                    | Filtered by: <em>"{{ request('search') }}"</em>
-                @endif
-                @if(request()->has('branch') && request('branch'))
-                    | Branch: <em>{{ $branches->find(request('branch'))->name ?? 'Unknown' }}</em>
-                @endif
-            </div>
+                                    </td>
+                                    <td>{{ $factory['created_at'] }}</td>
+                                    <td class="actions-cell">
+                                        <a href="{{ route('factories.edit', $factory['name']) }}" class="btn-theme btn-theme-primary btn-sm">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <form action="{{ route('factories.destroy', $factory['name']) }}" method="POST" onsubmit="return confirm('Delete this factory?')" style="display:inline;">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn-theme btn-theme-danger btn-sm">
+                                                <i class="fas fa-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="empty-state">
+                    <i class="fas fa-industry text-gray-400 text-4xl mb-4"></i>
+                    <h4>No factories found</h4>
+                    <p>Create your first product factory to get started.</p>
+                    <a href="{{ route('factories.create') }}" class="btn-theme btn-theme-primary">Create Factory</a>
+                </div>
+            @endif
         </div>
     </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('.quantity-form').forEach(form => {
-                const minusBtn = form.querySelector('.qty-minus');
-                const plusBtn = form.querySelector('.qty-plus');
-                const input = form.querySelector('.quantity-input');
+</div>
 
-                minusBtn.addEventListener('click', () => {
-                    let value = parseInt(input.value) || 0;
-                    if (value > 0) input.value = value - 1;
-                });
-
-                plusBtn.addEventListener('click', () => {
-                    let value = parseInt(input.value) || 0;
-                    input.value = value + 1;
-                });
-            });
-        });
-    </script>
-
-
-    {{-- Enhanced CSS Styles --}}
-    <style>
+{{-- Enhanced CSS Styles --}}
+<style>
         /* Alert Messages with Icons */
         .alert {
             padding: 12px 20px;
@@ -294,7 +170,6 @@
         tr.zero-stock {
             background: linear-gradient(90deg, rgba(239, 68, 68, 0.1), transparent);
             border-left: 3px solid #ef4444;
-            font-weight: bold;
         }
 
         /* Button Themes */
@@ -313,38 +188,6 @@
             justify-content: center;
             gap: 5px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Low Stock Toggle */
-        .low-stock-toggle {
-            display: inline-flex;
-            align-items: center;
-        }
-        .low-stock-toggle input {
-            display: none;
-        }
-        .low-stock-toggle .toggle-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
-            border-radius: 9999px;
-            font-weight: 600;
-            cursor: pointer;
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-            color: #ffffff;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border: none;
-        }
-        .low-stock-toggle .toggle-pill:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-        .low-stock-toggle input:checked + .toggle-pill {
-            background: linear-gradient(135deg, #f59e0b, #fb923c);
-            color: #1f2937;
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
         }
 
         .btn-theme-primary {
@@ -378,6 +221,27 @@
         .btn-sm {
             padding: 6px 10px;
             font-size: 0.8rem;
+        }
+
+        .btn-action {
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+
+        .btn-theme:hover,
+        .btn-action:hover {
+            opacity: 0.9;
         }
 
         /* Actions Cell Layout */

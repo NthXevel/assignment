@@ -47,6 +47,22 @@
                         @error('category_id') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
+                    <!-- Factory (optional override) -->
+                    <div class="form-group">
+                        <label for="factory_class">Factory (optional)</label>
+                        <select name="factory_class" id="factory_class" class="form-control">
+                            <option value="">Use category default</option>
+                            @isset($factories)
+                                @foreach($factories as $factory)
+                                    <option value="{{ $factory }}" {{ old('factory_class') === $factory ? 'selected' : '' }}>
+                                        {{ $factory }}
+                                    </option>
+                                @endforeach
+                            @endisset
+                        </select>
+                        @error('factory_class') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
                     <!-- Cost Price -->
                     <div class="form-group">
                         <label for="cost_price">Cost Price (RM)</label>

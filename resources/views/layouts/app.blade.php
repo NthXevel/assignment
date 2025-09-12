@@ -17,7 +17,11 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-image: linear-gradient(135deg, rgba(102, 126, 234, 0.6), rgba(118, 75, 162, 0.6)), url('{{ asset('images/warehouse-bg.jpg') }}');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
             min-height: 100vh;
             color: #333;
         }
@@ -535,8 +539,7 @@
                     <li class="nav-item"><a href="{{ route('users.index') }}" class="nav-link"><i class="fas fa-users"></i>
                             User Management</a></li>
                 @endif
-                <li class="nav-item"><a href="{{ route('records.index') }}" class="nav-link"><i
-                            class="fas fa-chart-bar"></i> Records</a></li>
+
                 <li class="nav-item"><a href="{{ route('settings.index') }}" class="nav-link"><i class="fas fa-cog"></i>
                         Settings</a></li>
             </ul>

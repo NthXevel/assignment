@@ -44,7 +44,24 @@ class ProductController extends Controller
     public function create()
     {
         $categories = ProductCategory::all();
-        return view('products.create', compact('categories'));
+
+        // Discover available product factories for optional selection at creation
+        $factories = collect();
+        $path = app_path('Factories/Products');
+        if (\Illuminate\Support\Facades\File::exists($path)) {
+            foreach (\Illuminate\Support\Facades\File::files($path) as $file) {
+                $base = $file->getBasename('.php');
+                if (in_array($base, ['ProductFactory'])) {
+                    continue;
+                }
+                // Only include classes that end with Factory
+                if ($file->getExtension() === 'php' && str_ends_with($base, 'Factory')) {
+                    $factories->push($base);
+                }
+            }
+        }
+
+        return view('products.create', compact('categories', 'factories'));
     }
 
     public function store(Request $request)
@@ -57,20 +74,32 @@ class ProductController extends Controller
             'cost_price' => 'required|numeric|min:0',
             'selling_price' => 'required|numeric|gt:cost_price',
             'description' => 'nullable|string',
-            'specifications' => 'nullable|json', // Change to json validation
+            'specifications' => 'nullable|json',
+            'factory_class' => 'nullable|string',
         ]);
 
         try {
             DB::transaction(function () use ($validated, &$product) {
-                // Decode specifications JSON if present
-                if (!empty($validated['specifications'])) {
-                    $validated['specifications'] = json_decode($validated['specifications'], true);
-                } else {
-                    $validated['specifications'] = [];
+                $category = ProductCategory::findOrFail($validated['category_id']);
+
+                // Resolve factory: user-selected factory_class takes precedence
+                $factory = null;
+                if (!empty($validated['factory_class'])) {
+                    $fqcn = "App\\Factories\\Products\\{$validated['factory_class']}";
+                    if (class_exists($fqcn)) {
+                        $instance = new $fqcn();
+                        if ($instance instanceof ProductFactory) {
+                            $factory = $instance;
+                        }
+                    }
+                }
+                if (!$factory) {
+                    // Fallback to category-mapped factory
+                    $factory = $category->getFactoryInstance();
                 }
 
-                // Create the product
-                $product = Product::create([
+                // Prepare product data
+                $productData = [
                     'name' => $validated['name'],
                     'model' => $validated['model'],
                     'sku' => $validated['sku'],
@@ -78,11 +107,16 @@ class ProductController extends Controller
                     'cost_price' => round((float) $validated['cost_price'], 2),
                     'selling_price' => round((float) $validated['selling_price'], 2),
                     'description' => $validated['description'],
-                    'specifications' => $validated['specifications'],
+                    'specifications' => !empty($validated['specifications'])
+                        ? json_decode($validated['specifications'], true)
+                        : [],
                     'is_active' => true
-                ]);
+                ];
 
-                // Create stock entries for all branches with 0 quantity
+                // Create product using factory
+                $product = $factory->createProduct($productData);
+
+                // Create stock entries for all branches
                 $branches = \App\Models\Branch::all();
                 foreach ($branches as $branch) {
                     $product->stocks()->create([
@@ -228,16 +262,20 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:product_categories,name',
             'description' => 'nullable|string',
+            'factory_type' => 'required|string|in:smartphones-accessories,computers-peripherals,home-entertainment,wearables-smart-devices',
         ]);
 
-        \App\Models\ProductCategory::create([
+        $slug = Str::slug($validated['name']);
+
+        ProductCategory::create([
             'name' => $validated['name'],
-            'slug' => \Illuminate\Support\Str::slug($validated['name']),
+            'slug' => $slug,
             'description' => $validated['description'] ?? null,
-            'status' => 'active', // default to active
+            'status' => 'active',
+            'factory_type' => $validated['factory_type']
         ]);
 
         return redirect()->route('products.index')
-            ->with('success', 'Category added successfully');
+            ->with('success', 'Category and Factory mapping added successfully');
     }
 }
