@@ -18,10 +18,8 @@
                         <select id="product_id" name="items[0][product_id]" class="form-control" required>
                             <option value="">Select Product</option>
                             @foreach($products as $product)
-                                <option value="{{ $product->id }}" 
-                                        data-stocks='@json($product->stocks)'
-                                        data-current-branch-id="{{ auth()->user()->branch_id }}">
-                                    {{ $product->name }} ({{ $product->category->name }})
+                                <option value="{{ $product->id }}">
+                                    {{ $product->name }} ({{ $product->category_name }})
                                 </option>
                             @endforeach
                         </select>
@@ -82,70 +80,80 @@
 </div>
 
 <script>
-// Get current branch ID (you might need to pass this from the controller)
 const currentBranchId = {{ auth()->user()->branch_id ?? 'null' }};
+const productSelect   = document.getElementById('product_id');
+const branchSelect    = document.getElementById('supplying_branch_id');
+const quantityInput   = document.getElementById('quantity');
+const stockInfo       = document.getElementById('available-stock');
+const currentStockInfo= document.getElementById('current-branch-stock');
 
-document.getElementById('product_id').addEventListener('change', function() {
-    const selectedOption = this.options[this.selectedIndex];
-    const branchSelect = document.getElementById('supplying_branch_id');
-    const quantityInput = document.getElementById('quantity');
-    const stockInfo = document.getElementById('available-stock');
-    const currentStockInfo = document.getElementById('current-branch-stock');
+async function fetchAvailability(productId) {
+  const url = `{{ route('orders.branches_with_stock') }}?product_id=${encodeURIComponent(productId)}`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
+  if (!res.ok) throw new Error('Failed to load availability');
+  return await res.json();
+}
 
-    if (this.value) {
-        const stocks = JSON.parse(selectedOption.dataset.stocks);
-        
+function resetBranchAndQty() {
+    branchSelect.innerHTML = '<option value="">Select a branch</option>';
+    quantityInput.value = '';
+    quantityInput.removeAttribute('max');
+    stockInfo.textContent = '';
+}
+
+productSelect.addEventListener('change', async function() {
+    resetBranchAndQty();
+    currentStockInfo.textContent = '';
+    currentStockInfo.className = 'current-stock-info';
+
+    const productId = this.value;
+    if (!productId) return;
+
+    try {
+        const rows = await fetchAvailability(productId);
+
         // Show current branch stock
-        const currentBranchStock = stocks.find(stock => stock.branch_id == currentBranchId);
-        if (currentBranchStock) {
-            currentStockInfo.innerHTML = `<i class="fas fa-info-circle"></i> Current stock in your branch: <strong>${currentBranchStock.quantity}</strong>`;
+        const mine = rows.find(r => String(r.branch_id) === String(currentBranchId));
+        if (mine) {
+            currentStockInfo.innerHTML = `<i class="fas fa-info-circle"></i> Current stock in your branch: <strong>${mine.available_quantity}</strong>`;
             currentStockInfo.className = 'current-stock-info show';
         } else {
             currentStockInfo.innerHTML = `<i class="fas fa-exclamation-triangle"></i> No stock available in your branch`;
             currentStockInfo.className = 'current-stock-info show no-stock';
         }
-        
-        // Reset branch select
-        branchSelect.innerHTML = '<option value="">Select a branch</option>';
-        
-        // Add branches with stock information (excluding current branch)
-        stocks.forEach(stock => {
-            // Exclude current branch and only show branches with stock
-            if (stock.quantity > 0 && stock.branch_id != currentBranchId) {
-                branchSelect.innerHTML += `
-                    <option value="${stock.branch_id}" data-stock="${stock.quantity}">
-                        ${stock.branch.name} (Available: ${stock.quantity})
-                    </option>
-                `;
-            }
-        });
-        
-        // Show message if no other branches have stock
-        if (branchSelect.children.length === 1) {
-            branchSelect.innerHTML += '<option value="" disabled>No other branches have this product in stock</option>';
-        }
-    } else {
-        currentStockInfo.textContent = '';
-        currentStockInfo.className = 'current-stock-info';
-    }
 
-    // Reset quantity input
-    quantityInput.value = '';
-    quantityInput.max = '';
-    stockInfo.textContent = '';
+        // Populate supplier branches (exclude current branch + only >0)
+        const others = rows.filter(r => String(r.branch_id) !== String(currentBranchId) && Number(r.available_quantity) > 0);
+        for (const r of others) {
+            const opt = document.createElement('option');
+            opt.value = r.branch_id;
+            opt.textContent = `${r.branch_name} (Available: ${r.available_quantity})`;
+            opt.setAttribute('data-stock', r.available_quantity);
+            branchSelect.appendChild(opt);
+        }
+
+        if (branchSelect.children.length === 1) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.disabled = true;
+            opt.textContent = 'No other branches have this product in stock';
+            branchSelect.appendChild(opt);
+        }
+    } catch (e) {
+        console.error(e);
+        currentStockInfo.textContent = 'Failed to load stock availability';
+        currentStockInfo.className = 'current-stock-info show no-stock';
+    }
 });
 
-document.getElementById('supplying_branch_id').addEventListener('change', function() {
+branchSelect.addEventListener('change', function () {
     const selected = this.options[this.selectedIndex];
-    const available = selected.getAttribute('data-stock');
-    const quantityInput = document.getElementById('quantity');
-    const stockInfo = document.getElementById('available-stock');
-
+    const available = selected ? selected.getAttribute('data-stock') : null;
     if (available) {
         quantityInput.max = available;
         stockInfo.textContent = `Maximum available: ${available}`;
     } else {
-        quantityInput.max = '';
+        quantityInput.removeAttribute('max');
         stockInfo.textContent = '';
     }
 });

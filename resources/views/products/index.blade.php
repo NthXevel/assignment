@@ -147,7 +147,7 @@
                         @if($products->lastPage() > 5)
                             <span class="dots">...</span>
                             <a href="{{ $products->appends(request()->query())->url($products->lastPage()) }}"
-                                class="page-btn">{{ $stocks->lastPage() }}</a>
+                                class="page-btn">{{ $products->lastPage() }}</a>
                         @endif
                     </div>
                 @endif

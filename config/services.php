@@ -35,4 +35,20 @@ return [
         ],
     ],
 
+    'stock' => [
+    'base_url' => env('STOCK_SERVICE_BASE_URL', env('APP_URL')),
+    ],
+
+    'orders' => [
+        'base_url' => env('ORDERS_SERVICE_BASE_URL', env('APP_URL')),
+    ],
+
+    'products' => [
+        'base_url' => env('PRODUCTS_SERVICE_BASE_URL', env('APP_URL')),
+    ],
+
+    'branches' => [
+        'base_url' => env('BRANCHES_SERVICE_BASE_URL', env('APP_URL')),
+    ],
+
 ];

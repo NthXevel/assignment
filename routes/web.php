@@ -66,13 +66,19 @@ Route::middleware(['auth'])->group(function () {
     // -----------------------------
     // Order Management
     // -----------------------------
-    Route::resource('orders', OrderController::class);
+    Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
+    Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
+    Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+
     Route::post('/orders/{order}/approve', [OrderController::class, 'approve'])->name('orders.approve');
     Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');
     Route::post('/orders/{order}/receive', [OrderController::class, 'receive'])->name('orders.receive');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+
+    // AJAX helper used by the create form to list supplier branches with stock
     Route::get('/orders/branches-with-stock', [OrderController::class, 'getBranchesWithStock'])
-        ->name('orders.branches-with-stock');
+        ->name('orders.branches_with_stock');
 
     // -----------------------------
     // User Management

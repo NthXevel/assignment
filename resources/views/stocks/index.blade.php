@@ -85,19 +85,32 @@
                 </thead>
                 <tbody>
                     @forelse($stocks as $stock)
+                        @php
+                            // product info from the API map
+                            $p = $productsMap->get($stock->product_id);
+                            // branch object from the branches list
+                            $b = $branches->firstWhere('id', (int)$stock->branch_id);
+                        @endphp
                         <tr
                             class="{{ $stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : '') }}">
                             <td>#{{ $stock->id }}</td>
-                            <td>{{ $stock->product->name ?? '-' }}</td>
-                            <td>{{ $stock->branch->name ?? '-' }}</td>
+                            {{-- Product Name --}}
+                            <td>{{ $p['name'] ?? '-' }}</td>
+
+                            {{-- Branch Name --}}
+                            <td>{{ $b->name ?? '-' }}</td>
+
+                            {{-- Quantity --}}
                             <td>
                                 <span
                                     class="quantity-badge {{$stock->quantity <= 0 ? 'zero-stock' : ($stock->quantity <= $stock->minimum_threshold ? 'low-stock' : 'normal-stock')}}">
                                     {{ $stock->quantity }}
                                 </span>
                             </td>
-                            <td>{{ number_format($stock->product->cost_price ?? 0, 2) }}</td>
-                            <td>{{ number_format($stock->product->selling_price ?? 0, 2) }}</td>
+
+                            {{-- Cost & Selling (from Product API) --}}
+                            <td>{{ number_format($p['cost_price'] ?? 0, 2) }}</td>
+                            <td>{{ number_format($p['selling_price'] ?? 0, 2) }}</td>
 
                             @if(auth()->user()->role === 'admin')
                                 {{-- Actions Cell --}}
@@ -180,8 +193,11 @@
                 @if(request()->has('search') && request('search'))
                     | Filtered by: <em>"{{ request('search') }}"</em>
                 @endif
+                @php
+                    $selected = $branches->firstWhere('id', (int) request('branch'));
+                @endphp
                 @if(request()->has('branch') && request('branch'))
-                    | Branch: <em>{{ $branches->find(request('branch'))->name ?? 'Unknown' }}</em>
+                    | Branch: <em>{{ $selected->name ?? 'Unknown' }}</em>
                 @endif
             </div>
         </div>
