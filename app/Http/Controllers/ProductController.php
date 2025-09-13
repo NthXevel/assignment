@@ -298,6 +298,6 @@ class ProductController extends Controller
         ]);
 
         return redirect()->route('products.index')
-            ->with('success', 'Category and Factory mapping added successfully');
+            ->with('success', 'Category added successfully');
     }
 }

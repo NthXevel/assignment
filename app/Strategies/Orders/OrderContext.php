@@ -27,4 +27,9 @@ class OrderContext
     {
         return $this->strategy->getPriority();
     }
+
+    public function canShip(Order $order): bool
+    {
+        return $this->strategy->canShip($order);
+    }
 }

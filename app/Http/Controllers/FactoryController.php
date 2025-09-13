@@ -218,8 +218,8 @@ PHP;
             $description = trim(preg_replace('/^\s*\*\s?/m', '', $m[1]));
         }
 
-        // Extract array in array_merge($data['specifications'] ?? [], [ ... ]);
-        if (preg_match('#array_merge\(\$data\[\'specifications\'\]\s*\?\?\s*\[\],\s*(\[[\s\S]*?\])\)#', $content, $m)) {
+        // Extract array in array_merge($data['specifications'] ?? [], [ ... ]) or array(...)
+        if (preg_match('#array_merge\(\$data\[\'specifications\'\]\s*\?\?\s*\[\],\s*((?:\[[\s\S]*?\])|(?:array\s*\([\s\S]*?\)))\)#', $content, $m)) {
             $arrayCode = $m[1];
             // Safely eval as PHP array
             try {

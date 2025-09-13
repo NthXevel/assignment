@@ -12,7 +12,8 @@ class ProductCategory extends Model
         'slug',
         'description',
         'status',
-        'factory_type'
+        'factory_type',
+        'default_minimum_threshold'
     ];
 
     public function products()

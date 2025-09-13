@@ -28,4 +28,10 @@ class UrgentOrderStrategy implements OrderProcessingStrategy
     {
         return 'urgent';
     }
+
+    public function canShip(Order $order): bool
+    {
+        // Urgent orders are allowed to ship if approved.
+        return in_array($order->status, ['approved']);
+    }
 }
