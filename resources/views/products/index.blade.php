@@ -47,15 +47,9 @@
         <div class="filter-add-container" style="margin-top: 12px;">
             <form method="POST" action="{{ route('products.store-category') }}" class="filter-form">
                 @csrf
-                <input type="text" name="name" placeholder="New category..." required>
-                <input type="text" name="description" placeholder="Description (optional)">
-                <select name="factory_type" required>
-                    <option value="">Factory type...</option>
-                    <option value="smartphones-accessories">Smartphones & Accessories</option>
-                    <option value="computers-peripherals">Computers & Peripherals</option>
-                    <option value="home-entertainment">Home Entertainment</option>
-                    <option value="wearables-smart-devices">Wearables & Smart Devices</option>
-                </select>
+                <input type="text" name="name" placeholder="New category..." value="{{ old('name') }}" required>
+                <input type="number" min="0" name="minimum_threshold" placeholder="Min threshold" value="{{ old('minimum_threshold', 10) }}" required>
+                <input type="text" name="description" placeholder="Description (optional)" value="{{ old('description') }}">
                 <button type="submit" class="btn-theme btn-theme-primary">
                     <i class="fas fa-plus"></i> Add Category
                 </button>
@@ -147,7 +141,7 @@
                         @if($products->lastPage() > 5)
                             <span class="dots">...</span>
                             <a href="{{ $products->appends(request()->query())->url($products->lastPage()) }}"
-                                class="page-btn">{{ $stocks->lastPage() }}</a>
+                                class="page-btn">{{ $products->lastPage() }}</a>
                         @endif
                     </div>
                 @endif

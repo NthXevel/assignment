@@ -122,6 +122,7 @@ class ProductController extends Controller
                     $product->stocks()->create([
                         'branch_id' => $branch->id,
                         'quantity' => 0,
+                        'minimum_threshold' => $category->default_minimum_threshold ?? 10,
                     ]);
                 }
             });
@@ -262,7 +263,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:product_categories,name',
             'description' => 'nullable|string',
-            'factory_type' => 'required|string|in:smartphones-accessories,computers-peripherals,home-entertainment,wearables-smart-devices',
+            'minimum_threshold' => 'required|integer|min:0',
         ]);
 
         $slug = Str::slug($validated['name']);
@@ -272,10 +273,10 @@ class ProductController extends Controller
             'slug' => $slug,
             'description' => $validated['description'] ?? null,
             'status' => 'active',
-            'factory_type' => $validated['factory_type']
+            'default_minimum_threshold' => $validated['minimum_threshold'],
         ]);
 
         return redirect()->route('products.index')
-            ->with('success', 'Category and Factory mapping added successfully');
+            ->with('success', 'Category added successfully');
     }
 }

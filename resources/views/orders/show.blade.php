@@ -26,6 +26,17 @@
                             {{ ucfirst($order->status) }}
                         </span>
                     </p>
+                    <p><strong>Priority:</strong>
+                        @php
+                            $priorityStyles = [
+                                'urgent' => 'background:#fee2e2;color:#991b1b',
+                                'standard' => 'background:#e0e7ff;color:#3730a3',
+                            ];
+                        @endphp
+                        <span style="padding:6px 10px; border-radius:12px; font-weight:600; font-size:0.85rem; {{ $priorityStyles[$order->priority] ?? '' }}">
+                            {{ ucfirst($order->priority ?? 'standard') }}
+                        </span>
+                    </p>
                     <p><strong>Created By:</strong> {{ $order->creator->name ?? $order->creator->username }}</p>
                     <p><strong>Requesting Branch:</strong> {{ $order->requestingBranch->name }}</p>
                     <p><strong>Supplying Branch:</strong> {{ $order->supplyingBranch->name }}</p>

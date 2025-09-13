@@ -191,6 +191,18 @@ class OrderController extends Controller
             abort(403, 'Only the requesting branch can receive this order.');
         }
 
+        // Strategy-based shipping eligibility check
+        $context = new OrderContext();
+        if ($order->priority === 'urgent') {
+            $context->setStrategy(new UrgentOrderStrategy());
+        } else {
+            $context->setStrategy(new StandardOrderStrategy());
+        }
+
+        if (!$context->canShip($order)) {
+            return back()->with('error', "Send urgent's order first");
+        }
+
         $order->status = 'shipped';
         $order->save();
 

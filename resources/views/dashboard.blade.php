@@ -121,7 +121,7 @@
                         <th>Product</th>
                         <th>Branch</th>
                         <th>Current Stock</th>
-                        <th>Min Threshold</th>
+                        <th>Minimum Stock</th>
                     </tr>
                 </thead>
                 <tbody>

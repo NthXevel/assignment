@@ -6,6 +6,18 @@
         <p class="page-subtitle">Manage and track orders between branches</p>
     </div>
 
+    @if (session('error'))
+        <div class="alert alert-error">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>{{ session('error') }}</span>
+        </div>
+        <script>
+            window.addEventListener('DOMContentLoaded', function() {
+                alert(@json(session('error')));
+            });
+        </script>
+    @endif
+
     <div class="filter-add-container">
         {{-- Filter & Search Form --}}
         <form method="GET" action="{{ route('orders.index') }}" class="filter-form">
@@ -42,6 +54,7 @@
                     <th>From Branch</th>
                     <th>To Branch</th>
                     <th>Status</th>
+                    <th>Priority</th>
                     <th>Total Amount</th>
                     <th>Created At</th>
                     <th>Actions</th>
@@ -68,6 +81,20 @@
                             <span style="padding:6px 10px; border-radius:12px; font-weight:600; font-size:0.85rem;
                                             {{ $statusStyles[$order->status] ?? '' }}">
                                 {{ ucfirst($order->status) }}
+                            </span>
+                        </td>
+
+                        {{-- Priority Badge --}}
+                        @php
+                            $priorityStyles = [
+                                'urgent' => 'background:#fee2e2;color:#991b1b',
+                                'standard' => 'background:#e0e7ff;color:#3730a3',
+                            ];
+                        @endphp
+                        <td>
+                            <span style="padding:6px 10px; border-radius:12px; font-weight:600; font-size:0.85rem;
+                                            {{ $priorityStyles[$order->priority] ?? '' }}">
+                                {{ ucfirst($order->priority ?? 'standard') }}
                             </span>
                         </td>
 
