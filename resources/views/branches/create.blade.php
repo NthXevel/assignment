@@ -1,6 +1,13 @@
 @extends('layouts.app')
 
 @section('content')
+@if(session('success'))
+  <div class="alert alert-success">{{ session('success') }}</div>
+@endif
+@if($errors->any())
+  <div class="alert alert-error">{{ $errors->first() }}</div>
+@endif
+
 <div class="settings-page">
     <div class="settings-container">
         <h1><i class="fas fa-plus-circle"></i> Add New Branch</h1>
@@ -51,6 +58,16 @@
 
 <style>
     /* Reuse existing styles */
+    .btn-theme{
+    padding:8px 12px;border:none;border-radius:8px;font-weight:600;
+    display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+    cursor:pointer;transition:.2s box-shadow,.2s transform
+    }
+    .btn-theme:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+    .btn-theme-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+    .btn-theme-danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+    .btn-theme:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none}
+
     .settings-page {
         display: flex;
         justify-content: center;

@@ -1,84 +1,92 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="settings-page">
-        <div class="settings-container">
-            <h1><i class="fas fa-user-edit"></i> Edit User</h1>
-            <p>Update user account information and permissions</p>
+<div class="settings-page">
+    <div class="settings-container">
+        <h1><i class="fas fa-user-edit"></i> Edit User</h1>
+        <p>Update user account information and permissions</p>
 
-            <div class="settings-grid">
-                <div class="settings-card">
-                    <h2>User Details</h2>
+        @php
+            // tolerate array or model
+            $uid        = is_array($user) ? ($user['id'] ?? null)       : ($user->id ?? null);
+            $uname      = is_array($user) ? ($user['username'] ?? '')   : ($user->username ?? '');
+            $uemail     = is_array($user) ? ($user['email'] ?? '')      : ($user->email ?? '');
+            $urole      = is_array($user) ? ($user['role'] ?? '')       : ($user->role ?? '');
+            $ubranchId  = is_array($user) ? ($user['branch_id'] ?? null): ($user->branch_id ?? null);
 
-                    <form action="{{ route('users.update', $user->id) }}" method="POST">
-                        @csrf
-                        @method('PUT')
+            $isAdmin    = auth()->user()->role === 'admin';
+            $myBranchId = auth()->user()->branch_id ?? null;
+        @endphp
 
-                        {{-- Username --}}
-                        <div class="form-group">
-                            <label for="username">Username</label>
-                            <input id="username" type="text" name="username" value="{{ old('username', $user->username) }}"
-                                required>
-                            @error('username')
-                                <span class="error">{{ $message }}</span>
-                            @enderror
-                        </div>
+        <div class="settings-grid">
+            <div class="settings-card">
+                <h2>User Details</h2>
 
-                        {{-- Email --}}
-                        <div class="form-group">
-                            <label for="email">Email</label>
-                            <input id="email" type="email" name="email" value="{{ old('email', $user->email) }}" required>
-                            @error('email')
-                                <span class="error">{{ $message }}</span>
-                            @enderror
-                        </div>
+                <form action="{{ route('users.update', $uid) }}" method="POST">
+                    @csrf
+                    @method('PUT')
 
-                        {{-- Role --}}
-                        <div class="form-group">
-                            <label for="role">Role</label>
-                            <select id="role" name="role" required>
-                                @foreach($roles as $role)
-                                    <option value="{{ $role }}" {{ old('role', $user->role) === $role ? 'selected' : '' }}>
-                                        {{ ucfirst(str_replace('_', ' ', $role)) }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('role')
-                                <span class="error">{{ $message }}</span>
-                            @enderror
-                        </div>
+                    {{-- Username --}}
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input id="username" type="text" name="username" value="{{ old('username', $uname) }}" required>
+                        @error('username') <span class="error">{{ $message }}</span> @enderror
+                    </div>
 
-                        {{-- Branch (only admin can change) --}}
-                        @if(auth()->user()->role === 'admin')
-                            <div class="form-group">
-                                <label for="branch_id">Branch</label>
-                                <select id="branch_id" name="branch_id">
-                                    <option value="">-- Select Branch --</option>
-                                    @foreach($branches as $branch)
-                                        <option value="{{ $branch->id }}" {{ old('branch_id', $user->branch_id) == $branch->id ? 'selected' : '' }}>
-                                            {{ $branch->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('branch_id')
-                                    <span class="error">{{ $message }}</span>
-                                @enderror
-                            </div>
-                        @endif
+                    {{-- Email --}}
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input id="email" type="email" name="email" value="{{ old('email', $uemail) }}" required>
+                        @error('email') <span class="error">{{ $message }}</span> @enderror
+                    </div>
 
-                        <div class="form-actions">
-                            <button type="submit" class="btn-theme btn-theme-primary">
-                                <i class="fas fa-save"></i> Save Changes
-                            </button>
-                            <a href="{{ route('users.index') }}" class="btn-theme btn-theme-danger">
-                                <i class="fas fa-times"></i> Cancel
-                            </a>
-                        </div>
-                    </form>
-                </div>
+                    {{-- Role --}}
+                    <div class="form-group">
+                        <label for="role">Role</label>
+                        <select id="role" name="role" required>
+                            @foreach($roles as $role)
+                                <option value="{{ $role }}" {{ old('role', $urole) === $role ? 'selected' : '' }}>
+                                    {{ ucfirst(str_replace('_', ' ', $role)) }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('role') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
+                    {{-- Branch (admin can change; branch_manager locked to own branch) --}}
+                    <div class="form-group">
+                        <label for="branch_id">Branch</label>
+                        <select id="branch_id" name="branch_id" {{ $isAdmin ? '' : 'disabled' }}>
+                            <option value="">-- Select Branch --</option>
+                            @foreach($branches as $branch)
+                                @php
+                                    $bid   = is_array($branch) ? ($branch['id'] ?? null)   : ($branch->id ?? null);
+                                    $bname = is_array($branch) ? ($branch['name'] ?? '')   : ($branch->name ?? '');
+                                    $selected = (string)old('branch_id', $ubranchId) === (string)$bid ? 'selected' : '';
+                                    $disabled = (!$isAdmin && (string)$bid !== (string)$myBranchId) ? 'disabled' : '';
+                                @endphp
+                                <option value="{{ $bid }}" {{ $selected }} {{ $disabled }}>{{ $bname }}</option>
+                            @endforeach
+                        </select>
+                        @unless($isAdmin)
+                            <input type="hidden" name="branch_id" value="{{ $myBranchId }}">
+                        @endunless
+                        @error('branch_id') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-theme btn-theme-primary">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <a href="{{ route('users.index') }}" class="btn-theme btn-theme-danger">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
+</div>
 
     <style>
         .spec-row {

@@ -48,10 +48,10 @@ class StockApiController extends Controller
         ]);
 
         // Verify branch & product existence via APIs
-        $branches->get((int)$data['branch_id']); // throws if not found
-        foreach ($data['items'] as $it) {
-            $products->get((int)$it['product_id']); // throws if not found
-        }
+        //$branches->get((int)$data['branch_id']); // throws if not found
+        //foreach ($data['items'] as $it) {
+        //    $products->get((int)$it['product_id']); // throws if not found
+        //}
 
         try {
             DB::transaction(function () use ($data) {
@@ -113,8 +113,8 @@ class StockApiController extends Controller
             'items.*.quantity'     => ['required','integer','min:1'],
         ]);
 
-        $branches->get((int)$data['branch_id']);
-        foreach ($data['items'] as $it) { $products->get((int)$it['product_id']); }
+        //$branches->get((int)$data['branch_id']);
+        //foreach ($data['items'] as $it) { $products->get((int)$it['product_id']); }
 
         DB::transaction(function () use ($data) {
             foreach ($data['items'] as $it) {

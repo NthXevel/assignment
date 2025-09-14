@@ -9,37 +9,38 @@
         <div class="settings-grid">
             <div class="settings-card">
                 <h2><i class="fas fa-id-card"></i> User Information</h2>
+
                 <form method="POST" action="{{ route('users.store') }}">
                     @csrf
 
-                    <!-- Username -->
+                    {{-- Username --}}
                     <div class="form-group">
                         <label for="username">Username</label>
                         <input type="text" name="username" id="username" value="{{ old('username') }}" required>
                         @error('username') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
-                    <!-- Email -->
+                    {{-- Email --}}
                     <div class="form-group">
                         <label for="email">Email Address</label>
                         <input type="email" name="email" id="email" value="{{ old('email') }}" required>
                         @error('email') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
-                    <!-- Password -->
+                    {{-- Password --}}
                     <div class="form-group">
                         <label for="password">Password</label>
                         <input type="password" name="password" id="password" required>
                         @error('password') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
-                    <!-- Confirm Password -->
+                    {{-- Confirm Password --}}
                     <div class="form-group">
                         <label for="password_confirmation">Confirm Password</label>
                         <input type="password" name="password_confirmation" id="password_confirmation" required>
                     </div>
 
-                    <!-- Role -->
+                    {{-- Role --}}
                     <div class="form-group">
                         <label for="role">Role</label>
                         <select name="role" id="role" required>
@@ -53,23 +54,37 @@
                         @error('role') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
-                    <!-- Branch (Admin only can choose, else fixed to user’s branch) -->
-                    @if(auth()->user()->role === 'admin')
+                    {{-- Branch (Admin can choose; Branch Manager is locked to own branch but still submits value) --}}
+                    @php
+                        $isAdmin      = auth()->user()->role === 'admin';
+                        $myBranchId   = auth()->user()->branch_id ?? null;
+                        $oldBranchId  = old('branch_id', $myBranchId);
+                    @endphp
+
+                    @if($isAdmin || auth()->user()->role === 'branch_manager')
                         <div class="form-group">
                             <label for="branch_id">Branch</label>
-                            <select name="branch_id" id="branch_id">
-                                <option value="">-- No Branch --</option>
+                            <select name="branch_id" id="branch_id" {{ $isAdmin ? '' : 'disabled' }}>
+                                <option value="">-- Select Branch --</option>
                                 @foreach($branches as $branch)
-                                    <option value="{{ $branch->id }}" {{ old('branch_id') == $branch->id ? 'selected' : '' }}>
-                                        {{ $branch->name }}
-                                    </option>
+                                    @php
+                                        $bid   = is_array($branch) ? ($branch['id'] ?? null)   : ($branch->id ?? null);
+                                        $bname = is_array($branch) ? ($branch['name'] ?? '')   : ($branch->name ?? '');
+                                        $selected = (string)$oldBranchId === (string)$bid ? 'selected' : '';
+                                        $disabled = (!$isAdmin && (string)$bid !== (string)$myBranchId) ? 'disabled' : '';
+                                    @endphp
+                                    <option value="{{ $bid }}" {{ $selected }} {{ $disabled }}>{{ $bname }}</option>
                                 @endforeach
                             </select>
+                            {{-- ensure value is submitted for branch_manager even when <select> is disabled --}}
+                            @unless($isAdmin)
+                                <input type="hidden" name="branch_id" value="{{ $myBranchId }}">
+                            @endunless
                             @error('branch_id') <span class="error">{{ $message }}</span> @enderror
                         </div>
                     @endif
 
-                    <!-- Form Actions -->
+                    {{-- Actions --}}
                     <div class="form-actions">
                         <button type="submit" class="btn-theme btn-theme-primary">
                             <i class="fas fa-save"></i> Save User

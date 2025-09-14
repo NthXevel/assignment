@@ -51,6 +51,19 @@ class ProductService
         return $res->json(); // [{id,name,category_name,selling_price}, ...]
     }
     
+    // Minimal list to drive stock init
+    public function listActiveIds(): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()
+            ->get($this->baseUrl.'/api/products', ['status'=>'active','fields'=>'id']);
+        if (!$res->successful()) {
+            throw new \RuntimeException("Products API {$res->status()}: ".mb_substr((string)$res->body(),0,200));
+        }
+        // Accept either {data:[{id:..}]} or a flat array
+        $rows = $res->json('data') ?? $res->json();
+        return array_map(fn($r) => (int)$r['id'], $rows);
+    }
+
     public function list(array $filters = []): LengthAwarePaginator
     {
         $query = Product::query()->with('category');

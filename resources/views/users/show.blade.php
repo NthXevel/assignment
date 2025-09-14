@@ -1,47 +1,61 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="settings-page">
-        <div class="settings-container">
-            <h1><i class="fas fa-user"></i> User Details</h1>
-            <p>View account information and permissions</p>
+<div class="settings-page">
+    <div class="settings-container">
+        <h1><i class="fas fa-user"></i> User Details</h1>
+        <p>View account information and permissions</p>
 
-            <div class="settings-grid">
-                <div class="settings-card">
-                    <h2>User Information</h2>
+        @php
+            // tolerate array or model
+            $uid    = is_array($user) ? ($user['id'] ?? null)       : ($user->id ?? null);
+            $uname  = is_array($user) ? ($user['username'] ?? '')   : ($user->username ?? '');
+            $uemail = is_array($user) ? ($user['email'] ?? '')      : ($user->email ?? '');
+            $urole  = is_array($user) ? ($user['role'] ?? '')       : ($user->role ?? '');
+            $bname  = '-';
+            if (is_array($user)) {
+                $bname = is_array($user['branch'] ?? null) ? ($user['branch']['name'] ?? 'N/A') : 'N/A';
+            } else {
+                $bname = $user->branch->name ?? 'N/A';
+            }
+        @endphp
 
-                    <div class="form-group">
-                        <label>Username</label>
-                        <p>{{ $user->username }}</p>
-                    </div>
+        <div class="settings-grid">
+            <div class="settings-card">
+                <h2>User Information</h2>
 
-                    <div class="form-group">
-                        <label>Email</label>
-                        <p>{{ $user->email }}</p>
-                    </div>
+                <div class="form-group">
+                    <label>Username</label>
+                    <p>{{ $uname }}</p>
+                </div>
 
-                    <div class="form-group">
-                        <label>Role</label>
-                        <p>{{ ucfirst(str_replace('_', ' ', $user->role)) }}</p>
-                    </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <p>{{ $uemail }}</p>
+                </div>
 
-                    <div class="form-group">
-                        <label>Branch</label>
-                        <p>{{ $user->branch->name ?? 'N/A' }}</p>
-                    </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <p>{{ ucfirst(str_replace('_', ' ', $urole)) }}</p>
+                </div>
 
-                    <div class="form-actions">
-                        <a href="{{ route('users.edit', $user->id) }}" class="btn-theme btn-theme-primary">
-                            <i class="fas fa-edit"></i> Edit User
-                        </a>
-                        <a href="{{ route('users.index') }}" class="btn-theme btn-theme-danger">
-                            <i class="fas fa-arrow-left"></i> Back
-                        </a>
-                    </div>
+                <div class="form-group">
+                    <label>Branch</label>
+                    <p>{{ $bname }}</p>
+                </div>
+
+                <div class="form-actions">
+                    <a href="{{ route('users.edit', $uid) }}" class="btn-theme btn-theme-primary">
+                        <i class="fas fa-edit"></i> Edit User
+                    </a>
+                    <a href="{{ route('users.index') }}" class="btn-theme btn-theme-danger">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </a>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
     {{-- Reuse the same CSS from edit page --}}
     <style>

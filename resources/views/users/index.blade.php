@@ -14,9 +14,13 @@
                 <select name="branch" onchange="this.form.submit()" class="form-control">
                     <option value="">-- All Branches --</option>
                     @foreach($branches as $branch)
-                        <option value="{{ $branch->id }}" {{ request('branch') == $branch->id ? 'selected' : '' }}>
-                            {{ $branch->name }}
-                        </option>
+                    @php
+                        $bid   = is_array($branch) ? ($branch['id'] ?? null)   : ($branch->id ?? null);
+                        $bname = is_array($branch) ? ($branch['name'] ?? '')   : ($branch->name ?? '');
+                    @endphp
+                    <option value="{{ $bid }}" {{ (string)request('branch') === (string)$bid ? 'selected' : '' }}>
+                        {{ $bname }}
+                    </option>
                     @endforeach
                 </select>
             @endif
@@ -65,28 +69,36 @@
                 </thead>
                 <tbody>
                     @forelse($users as $user)
-                        <tr>
-                            <td>#{{ $user->id }}</td>
-                            <td>{{ $user->username }}</td>
-                            <td>{{ $user->email }}</td>
-                            <td>{{ ucfirst(str_replace('_', ' ', $user->role)) }}</td>
-                            <td>{{ $user->branch->name ?? '-' }}</td>
+                        @php
+                            $uid    = is_array($user) ? ($user['id'] ?? null)       : ($user->id ?? null);
+                            $uname  = is_array($user) ? ($user['username'] ?? '')   : ($user->username ?? '');
+                            $uemail = is_array($user) ? ($user['email'] ?? '')      : ($user->email ?? '');
+                            $urole  = is_array($user) ? ($user['role'] ?? '')       : ($user->role ?? '');
+                            $branch = is_array($user)
+                                ? (is_array($user['branch'] ?? null) ? ($user['branch']['name'] ?? '-') : '-')
+                                : ($user->branch->name ?? '-');
+                        @endphp
 
-                            <td style="display: flex; gap: 8px; align-items: center;">
-                                {{-- View Profile (always visible) --}}
-                                <a href="{{ route('users.show', $user->id) }}" class="btn-theme btn-theme-secondary btn-sm">
+                        <tr>
+                            <td>#{{ $uid }}</td>
+                            <td>{{ $uname }}</td>
+                            <td>{{ $uemail }}</td>
+                            <td>{{ ucfirst(str_replace('_', ' ', $urole)) }}</td>
+                            <td>{{ $branch }}</td>
+
+                            <td style="display:flex;gap:8px;align-items:center;">
+                                <a href="{{ route('users.show', $uid) }}" class="btn-theme btn-theme-secondary btn-sm">
                                     <i class="fas fa-eye"></i> View
                                 </a>
 
-                                {{-- Edit & Delete only for admin/branch_manager --}}
                                 @if(in_array(auth()->user()->role, ['admin', 'branch_manager']))
-                                    <a href="{{ route('users.edit', $user->id) }}" class="btn-theme btn-theme-primary btn-sm">
+                                    <a href="{{ route('users.edit', $uid) }}" class="btn-theme btn-theme-primary btn-sm">
                                         <i class="fas fa-edit"></i> Edit
                                     </a>
-                                    <form action="{{ route('users.destroy', $user->id) }}" method="POST" style="display:inline;">
+                                    <form action="{{ route('users.destroy', $uid) }}" method="POST" style="display:inline;">
                                         @csrf @method('DELETE')
                                         <button class="btn-theme btn-theme-danger btn-sm"
-                                            onclick="return confirm('Delete this user?')">
+                                                onclick="return confirm('Delete this user?')">
                                             <i class="fas fa-trash"></i> Delete
                                         </button>
                                     </form>
@@ -143,8 +155,16 @@
                 @if(request()->has('search') && request('search'))
                     | Filtered by: <em>"{{ request('search') }}"</em>
                 @endif
-                @if(request()->has('branch') && request('branch'))
-                    | Branch: <em>{{ $branches->find(request('branch'))->name ?? 'Unknown' }}</em>
+                @if(request()->filled('branch'))
+                    @php
+                        $selected = collect($branches)->first(function ($b) {
+                            $id = is_array($b) ? ($b['id'] ?? null) : ($b->id ?? null);
+                            return (string)$id === (string)request('branch');
+                        });
+                        $selectedName = is_array($selected) ? ($selected['name'] ?? 'Unknown')
+                                        : ($selected->name ?? 'Unknown');
+                    @endphp
+                    | Branch: <em>{{ $selectedName }}</em>
                 @endif
             </div>
         </div>

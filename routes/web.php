@@ -66,6 +66,10 @@ Route::middleware(['auth'])->group(function () {
     // -----------------------------
     // Order Management
     // -----------------------------
+    // AJAX helper used by the create form to list supplier branches with stock
+    Route::get('/orders/branches-with-stock', [OrderController::class, 'getBranchesWithStock'])
+        ->name('orders.branches_with_stock');
+
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
     Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
@@ -75,10 +79,6 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');
     Route::post('/orders/{order}/receive', [OrderController::class, 'receive'])->name('orders.receive');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
-
-    // AJAX helper used by the create form to list supplier branches with stock
-    Route::get('/orders/branches-with-stock', [OrderController::class, 'getBranchesWithStock'])
-        ->name('orders.branches_with_stock');
 
     // -----------------------------
     // User Management
@@ -98,7 +98,7 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->name('branches.destroy');
         });
 
-        // Public: view branches (place these after)
+        // Public: view branches
         Route::get('branches', [BranchController::class, 'index'])->name('branches.index');
         Route::get('branches/{branch}', [BranchController::class, 'show'])->name('branches.show');
     });

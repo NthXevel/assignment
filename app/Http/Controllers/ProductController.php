@@ -11,6 +11,7 @@ use App\Factories\Products\ProductFactory;
 use Illuminate\Support\Facades\DB;
 use App\Services\StockService;
 use App\Services\BranchService;
+use App\Services\OrderService;
 
 class ProductController extends Controller
 {
@@ -94,10 +95,16 @@ class ProductController extends Controller
 
         try {
             $product = null;
+            $minThreshold = 10;
 
             DB::transaction(function () use ($validated, &$product) {
                 $category = ProductCategory::findOrFail($validated['category_id']);
 
+                // Carry the category’s default threshold outward (if present)
+                if (property_exists($category, 'default_minimum_threshold') && $category->default_minimum_threshold !== null) {
+                    $minThreshold = (int) $category->default_minimum_threshold;
+                }
+                
                 // Resolve factory: user-selected or category-mapped
                 $factory = null;
                 if (!empty($validated['factory_class'])) {
@@ -113,19 +120,23 @@ class ProductController extends Controller
                     $factory = $category->getFactoryInstance();
                 }
 
-                // Normalize specifications to array
+
+                // Normalize specifications safely
                 $specs = [];
                 if (!empty($validated['specifications'])) {
                     if (is_string($validated['specifications'])) {
                         $decoded = json_decode($validated['specifications'], true);
                         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                             $specs = $decoded;
+                        } else {
+                            // invalid JSON -> keep empty array
+                            $specs = [];
                         }
                     } elseif (is_array($validated['specifications'])) {
                         $specs = $validated['specifications'];
                     }
                 }
-
+                
                 $data = [
                     'name'           => $validated['name'],
                     'model'          => $validated['model'],
@@ -134,11 +145,15 @@ class ProductController extends Controller
                     'cost_price'     => round((float)$validated['cost_price'], 2),
                     'selling_price'  => round((float)$validated['selling_price'], 2),
                     'description'    => $validated['description'] ?? '',
-                    'specifications' => $specs,
+                    'specifications' => $specs,  
                 ];
-                if (\Schema::hasColumn('products', 'is_active')) $data['is_active'] = true;
-                elseif (\Schema::hasColumn('products', 'status')) $data['status'] = 'active';
 
+                if (\Schema::hasColumn('products', 'is_active')) {
+                    $data['is_active'] = true;
+                } elseif (\Schema::hasColumn('products', 'status')) {
+                    $data['status'] = 'active';
+                }
+                
                 $product = $factory->createProduct($data);
             });
 
@@ -150,7 +165,7 @@ class ProductController extends Controller
 
             foreach ($branches as $b) {
                 try {
-                    $stockApi->upsert((int)$b['id'], (int)$product->id, 0, 0, true); // quantity=0, keep existing
+                    $stockApi->upsert((int)$b['id'], (int)$product->id, 0, $minThreshold, true); // quantity=0, keep existing
                 } catch (\Throwable $e) {
                     // may log this, but don't block product creation (So currently, don't log first - by Jie Han)
                     // \Log::warning('Stock upsert failed', ['branch_id'=>$b['id'],'product_id'=>$product->id,'err'=>$e->getMessage()]);
@@ -248,27 +263,101 @@ class ProductController extends Controller
         }
     }
 
-    public function destroy(Product $product, StockService $stockApi)
+    public function destroy(Product $product, StockService $stockApi, BranchService $branchesApi, OrderService $orderApi)
     {
-        // Don’t directly touch Stock or Order DBs; check availability via REST.
+            // 1) Who is main?
+        try {
+            $mainId = $branchesApi->mainBranchId();
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Cannot determine main branch; aborting.']);
+        }
+
+        // 2) Get current availability for this product
         try {
             $avail = collect($stockApi->availability((int)$product->id, null));
         } catch (\Throwable $e) {
             return back()->withErrors(['error' => 'Stock service unavailable; cannot validate deletion.']);
         }
 
-        $total = (int)$avail->sum('available_quantity');
+        // Qty currently outside main
+        $outsideQty = (int) $avail
+            ->filter(fn ($r) => (int)$r['branch_id'] !== $mainId)
+            ->sum('available_quantity');
 
-        if ($total > 0) {
-            // Enforce business rule: ask user to clear/transfer stock via Orders/Stock first
-            return back()->withErrors([
-                'error' => "Cannot deactivate product while {$total} units exist in branches. " .
-                           "Please transfer/receive/cancel to clear stock first."
+        // Nothing to move? Deactivate now.
+        if ($outsideQty === 0) {
+            \DB::transaction(function () use ($product) {
+                if (\Schema::hasColumn('products', 'is_active')) {
+                    $product->update(['is_active' => false]);
+                } elseif (\Schema::hasColumn('products', 'status')) {
+                    $product->update(['status' => 'inactive']);
+                }
+            });
+            return redirect()->route('products.index')
+                ->with('success', 'Product deactivated successfully.');
+        }
+
+        // 3) Return from each non-main branch
+        $errors = [];
+
+        foreach ($avail as $row) {
+            $fromId = (int) $row['branch_id'];
+            if ($fromId === $mainId) continue;
+
+            // Fresh read to avoid races
+            try {
+                $fresh = collect($stockApi->availability((int)$product->id, null))
+                    ->firstWhere('branch_id', $fromId);
+            } catch (\Throwable $e) {
+                $fresh = $row;
+            }
+
+            $qty = (int) ($fresh['available_quantity'] ?? 0);
+            if ($qty <= 0) continue;
+
+            try {
+                $resp = $orderApi->createReturn(
+                    toBranchId:   $mainId,
+                    fromBranchId: $fromId,
+                    items: [[
+                        'product_id' => (int) $product->id,
+                        'quantity'   => $qty,
+                        'unit_price' => (float) ($product->selling_price ?? 0),
+                    ]],
+                    notes: 'Auto return before product deactivation',
+                    createdBy: auth()->id(),
+                    autoComplete: true
+                );
+                \Log::info('Auto-return OK', ['product_id'=>$product->id,'from'=>$fromId,'resp'=>$resp]);
+            } catch (\Throwable $e) {
+                \Log::error('Auto-return failed', ['product_id'=>$product->id,'from'=>$fromId,'err'=>$e->getMessage()]);
+                $errors[] = "Branch {$fromId}: ".$e->getMessage();
+            }
+        }
+
+        if (!empty($errors)) {
+            return back()->withErrors(['error' => 'Some returns failed: '.implode(' | ', $errors)]);
+        }
+
+        // 4) Poll: wait until outside-main hits zero (handles tiny lag)
+        $remainingOutside = -1;
+        for ($i = 0; $i < 12; $i++) { // up to ~3s
+            usleep(250_000);
+            try {
+                $remainingOutside = (int) collect($stockApi->availability((int)$product->id, null))
+                    ->filter(fn ($r) => (int)$r['branch_id'] !== $mainId)
+                    ->sum('available_quantity');
+                if ($remainingOutside === 0) break;
+            } catch (\Throwable $e) { /* ignore and retry */ }
+        }
+        if ($remainingOutside > 0) {
+            return back()->withErrors(['error' =>
+                "Auto-return finished but {$remainingOutside} units remain outside the main branch."
             ]);
         }
 
-        // Safe to deactivate locally
-        DB::transaction(function () use ($product) {
+        // 5) Deactivate locally
+        \DB::transaction(function () use ($product) {
             if (\Schema::hasColumn('products', 'is_active')) {
                 $product->update(['is_active' => false]);
             } elseif (\Schema::hasColumn('products', 'status')) {
@@ -277,7 +366,9 @@ class ProductController extends Controller
         });
 
         return redirect()->route('products.index')
-            ->with('success', 'Product deactivated successfully.');
+            ->with('success', 'Product removed. Stock returned to main branch.');
+
+        
     }
 
     // Add Category with auto-slug (local to Product module)

@@ -35,8 +35,12 @@ return [
         ],
     ],
 
+    'users' => [
+        'base_url' => env('USERS_SERVICE_BASE_URL', env('APP_URL')),
+    ],
+
     'stock' => [
-    'base_url' => env('STOCK_SERVICE_BASE_URL', env('APP_URL')),
+        'base_url' => env('STOCK_SERVICE_BASE_URL', env('APP_URL')),
     ],
 
     'orders' => [

@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Branch;
-use App\Models\Stock;
-use Illuminate\Support\Facades\DB;
-use App\Models\Order;
+use Illuminate\Pagination\LengthAwarePaginator;
+use App\Services\BranchService;
+use App\Services\ProductService;
+use App\Services\StockService;
+use App\Services\OrderService;
 
 class BranchController extends Controller
 {
@@ -15,102 +15,85 @@ class BranchController extends Controller
     {
         $this->middleware('auth');
         $this->middleware(function ($request, $next) {
-            if (auth()->user()->role !== 'admin') {
-                abort(403, 'Unauthorized action.');
-            }
+            if (auth()->user()->role !== 'admin') abort(403, 'Unauthorized action.');
             return $next($request);
-        })->only(['create', 'store', 'edit', 'update', 'destroy']);
+        })->only(['create','store','edit','update','destroy']);
     }
 
-    /**
-     * Display a list of branches based on user role
-     */
-    public function index()
+    public function index(Request $request, BranchService $branchesApi)
     {
+        $page = (int)$request->get('page', 1);
+        $per  = 10;
+        $resp = $branchesApi->paginate(['status'=>'active'], $page, $per);
+
+        // Cast each row to an object so Blade can use ->id, ->name, etc.
+        $items = array_map(fn ($row) => (object) $row, $resp['data'] ?? []);
+
+        $branches = new LengthAwarePaginator(
+            $items,
+            $resp['total'] ?? count($items),
+            $resp['per_page'] ?? $per,
+            $resp['current_page'] ?? $page,
+            ['path'=>$request->url(),'query'=>$request->query()]
+        );
+
         $user = auth()->user();
-
-        // Only show branches with status = 'active'
-        $branches = Branch::where('status', 'active')
-            ->withCount(['users', 'stocks'])
-            ->paginate(10);
-
-        return view('branches.index', compact('branches', 'user'));
+        return view('branches.index', compact('branches','user'));
     }
 
-    /**
-     * Show form to create a new branch (admin only)
-     */
-    public function create()
-    {
-        return view('branches.create');
-    }
+    public function create() { return view('branches.create'); }
 
-    /**
-     * Store a newly created branch
-     */
-    public function store(Request $request)
-    {
+    public function store(
+        Request $request,
+        BranchService $branchesApi,
+        ProductService $productsApi,
+        StockService $stockApi
+    ) {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'location' => 'required|string|max:255',
         ]);
 
-        // Add default values for status and is_main
-        $branchData = array_merge($validated, [
-            'status' => 'active',
-            'is_main' => false
-        ]);
-
         try {
-            DB::transaction(function () use ($branchData) {
-                // Create the branch
-                $branch = Branch::create($branchData);
+            // 1) Create branch via Branch API
+            $branch = $branchesApi->create([
+                'name' => $validated['name'],
+                'location' => $validated['location'],
+                'status' => 'active',
+                'is_main' => false,
+            ]);
+            $branchId = (int)($branch['id'] ?? $branch['data']['id'] ?? 0);
 
-                // Fetch all products
-                $products = \App\Models\Product::all();
-
-                // Create stock entries for each product with quantity = 0
-                foreach ($products as $product) {
-                    Stock::create([
-                        'product_id' => $product->id,
-                        'branch_id' => $branch->id,
-                        'quantity' => 0,
-                    ]);
+            // 2) Init stock rows for all products (REST orchestration)
+            $productIds = $productsApi->listActiveIds(); // [1,2,3,...]
+            foreach ($productIds as $pid) {
+                try {
+                    $stockApi->upsert($branchId, (int)$pid, 0, 10, true);
+                } catch (\Throwable $e) {
+                    
                 }
-            });
+            }
 
-            return redirect()
-                ->route('branches.index')
-                ->with('success', 'Branch created successfully with stock initialized for all products.');
-        } catch (\Exception $e) {
-            return back()
-                ->withInput()
-                ->withErrors(['error' => 'Failed to create branch: ' . $e->getMessage()]);
+            return redirect()->route('branches.index')
+                ->with('success', 'Branch created successfully with stock initialized.');
+        } catch (\Throwable $e) {
+            return back()->withInput()->withErrors(['error'=>'Failed to create branch: '.$e->getMessage()]);
         }
     }
 
-
-    /**
-     * Show branch details
-     */
-    public function show(Branch $branch)
+    public function show(int $id, BranchService $branchesApi)
     {
-        $branch->load(['users', 'stocks.product']);
+        $branch = $branchesApi->get($id);
         return view('branches.show', compact('branch'));
     }
 
-    /**
-     * Show form to edit a branch
-     */
-    public function edit(Branch $branch)
+    public function edit(int $id, BranchService $branchesApi)
     {
+        $branch = $branchesApi->get($id);
         return view('branches.edit', compact('branch'));
     }
 
-    /**
-     * Update branch info
-     */
-    public function update(Request $request, Branch $branch)
+    public function update(Request $request, int $id, BranchService $branchesApi)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -118,82 +101,75 @@ class BranchController extends Controller
         ]);
 
         try {
-            // Preserve existing is_main and status values
-            $validated['is_main'] = $branch->is_main;
-            $validated['status'] = $branch->status;
-
-            $branch->update($validated);
-
-            return redirect()
-                ->route('branches.index')
-                ->with('success', 'Branch updated successfully');
-        } catch (\Exception $e) {
-            return back()
-                ->withInput()
-                ->withErrors(['error' => 'Failed to update branch: ' . $e->getMessage()]);
+            $branchesApi->update($id, $validated);
+            return redirect()->route('branches.index')->with('success', 'Branch updated successfully');
+        } catch (\Throwable $e) {
+            return back()->withInput()->withErrors(['error'=>'Failed to update branch: '.$e->getMessage()]);
         }
     }
 
-    /**
-     * Delete branch and related stocks (admin only)
-     */
-    public function destroy($id)
-    {
-        $branch = Branch::with(['stocks', 'users'])->findOrFail($id);
-
-        if ($branch->is_main) {
-            return back()->withErrors(['error' => 'The main branch cannot be deactivated.']);
+    public function destroy(
+        int $id,
+        BranchService $branchesApi,
+        ProductService $productsApi,
+        StockService $stockApi,
+        OrderService $orderApi
+    ) {
+        // Main branch cannot be deactivated
+        try {
+            $mainId = $branchesApi->mainBranchId();
+            if ($id === $mainId) {
+                return back()->withErrors(['error' => 'The main branch cannot be deactivated.']);
+            }
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Cannot determine main branch.']);
         }
 
-        DB::transaction(function () use ($branch) {
-            // Get the main branch
-            $mainBranch = Branch::where('is_main', true)->firstOrFail();
+        // 1) For every product that has stock at this branch, return it to main via Orders API
+        $productIds = $productsApi->listActiveIds();
+        $errors = [];
 
-            foreach ($branch->stocks as $stock) {
-                if ($stock->quantity > 0) {
-                    // 1. Create a new order for this product
-                    $order = Order::create([
-                        'order_number' => 'ORD-RETURN-' . strtoupper(uniqid()),
-                        'requesting_branch_id' => $mainBranch->id, // main branch receives
-                        'supplying_branch_id' => $branch->id,    // closing branch supplies
-                        'created_by' => auth()->id(),
-                        'status' => 'received',     // auto-mark as received
-                        'priority' => 'urgent',
-                        'notes' => "Auto-return of {$stock->product->name} due to branch deactivation",
-                    ]);
-
-                    // 2. Add the single order item for this stock
-                    $order->items()->create([
-                        'product_id' => $stock->product_id,
-                        'quantity' => $stock->quantity,
-                        'unit_price' => $stock->product->selling_price ?? 0,
-                        'total_price' => ($stock->product->selling_price ?? 0) * $stock->quantity,
-                    ]);
-
-                    // 3. Transfer stock to main branch
-                    $mainStock = Stock::firstOrCreate(
-                        [
-                            'branch_id' => $mainBranch->id,
-                            'product_id' => $stock->product_id,
-                        ],
-                        ['quantity' => 0]
-                    );
-
-                    $mainStock->increment('quantity', $stock->quantity);
-
-                    // 4. Clear stock in closing branch
-                    $stock->update(['quantity' => 0]);
-                }
+        foreach ($productIds as $pid) {
+            try {
+                $rows = $stockApi->availability((int)$pid, null); // all branches
+            } catch (\Throwable $e) {
+                $errors[] = "Stock check failed for product {$pid}";
+                continue;
             }
+            $row = collect($rows)->firstWhere('branch_id', $id);
+            $qty = (int)($row['available_quantity'] ?? 0);
+            if ($qty <= 0) continue;
 
-            // 5. Deactivate all users in this branch
-            $branch->users()->update(['status' => 'inactive']);
+            try {
+                $orderApi->createReturn(
+                    fromBranchId: $id,
+                    toBranchId:   $mainId,
+                    items: [[
+                        'product_id' => (int)$pid,
+                        'quantity'   => $qty,
+                        'unit_price' => 0.0, // price not needed for quantity move
+                    ]],
+                    notes: 'Auto return caused by branch deactivation',
+                    createdBy: auth()->id(),
+                    autoComplete: true
+                );
+            } catch (\Throwable $e) {
+                $errors[] = "Return failed for product {$pid}: ".$e->getMessage();
+            }
+        }
 
-            // 6. Deactivate the branch
-            $branch->update(['status' => 'inactive']);
-        });
+        if (!empty($errors)) {
+            return back()->withErrors(['error' => 'Some returns failed: '.implode(' | ', $errors)]);
+        }
+
+        // 2) Deactivate the branch via Branches API (that API may also deactivate its users)
+        try {
+            $branchesApi->deactivate($id);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Failed to deactivate branch: '.$e->getMessage()]);
+        }
 
         return redirect()->route('branches.index')
-            ->with('success', 'Branch deactivated. All stock returned to main branch via multiple orders. Users set inactive.');
+            ->with('success', 'Branch deactivated. All stock returned to main via Orders API.');
     }
 }

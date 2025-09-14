@@ -300,7 +300,7 @@ class OrderController extends Controller
         $currentBranchId = auth()->user()->branch_id ?? null;
 
         try {
-            $rows = $stockApi->availability((int)$request->product_id, $currentBranchId);
+            $rows = $stockApi->availability((int)$request->product_id, null);
             return response()->json($rows);
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Stock service unavailable'], 502);

@@ -5,15 +5,16 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use App\Models\User;
-use App\Models\Branch;
+use Illuminate\Pagination\LengthAwarePaginator;
+use App\Services\UserService;
+use App\Services\BranchService;
+
 
 class UserController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth');
-        // Only admin and branch_manager can access user management
         $this->middleware(function ($request, $next) {
             if (!in_array(auth()->user()->role, ['admin', 'branch_manager'])) {
                 abort(403, 'Unauthorized action.');
@@ -22,72 +23,75 @@ class UserController extends Controller
         })->except(['profile', 'updateProfile']);
     }
 
-    public function index(Request $request)
+    public function index(Request $request, UserService $usersApi, BranchService $branchesApi)
     {
-        $user = auth()->user();
+        $me = auth()->user();
 
-        $query = User::with('branch')->where('status', 'active');
-
-        if ($user->role === 'admin') {
-            // Admin can filter across all branches
-            $query->when($request->branch, function ($q, $branch) {
-                $q->where('branch_id', $branch);
-            });
-        } elseif ($user->role === 'branch_manager') {
-            // Branch managers can only see their branch
-            $query->where('branch_id', $user->branch_id);
+        $filters = [
+            'status' => 'active',
+            'role'   => $request->role,
+            'search' => $request->search,
+        ];
+        if ($me->role === 'branch_manager') {
+            $filters['branch_id'] = $me->branch_id;
+        } elseif ($request->filled('branch')) {
+            $filters['branch_id'] = (int)$request->branch;
         }
 
-        $query->when($request->role, function ($q, $role) {
-            $q->where('role', $role);
-        })->when($request->search, function ($q, $search) {
-            $q->where(function ($sub) use ($search) {
-                $sub->where('username', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
-        });
+        $page    = (int)($request->get('page', 1));
+        $perPage = 15;
+        $resp    = $usersApi->paginate($filters, $page, $perPage);
 
-        $users = $query->paginate(15);
+        // Build Laravel paginator from API payload
+        $users = new LengthAwarePaginator(
+            $resp['data'] ?? [],
+            $resp['total'] ?? count($resp['data'] ?? []),
+            $resp['per_page'] ?? $perPage,
+            $resp['current_page'] ?? $page,
+            ['path' => $request->url(), 'query'=>$request->query()]
+        );
 
-        $branches = $user->role === 'admin'
-            ? Branch::where('status', 'active')->get() // only active branches
-            : Branch::where('id', $user->branch_id)->where('status', 'active')->get();
+        // branches for filter dropdown
+        $branches = ($me->role === 'admin')
+            ? collect($branchesApi->listActive())
+            : collect($branchesApi->listActive())->where('id', $me->branch_id)->values();
+
         $roles = ['admin', 'branch_manager', 'stock_manager', 'order_creator'];
 
         return view('users.index', compact('users', 'branches', 'roles'));
     }
 
-    public function create()
+    public function create(BranchService $branchesApi)
     {
-        $user = auth()->user();
+        $me = auth()->user();
+        $all = collect($branchesApi->listActive());
 
-        if ($user->role === 'branch_manager') {
-            $branches = Branch::where('id', $user->branch_id)->get();
-            $roles = ['order_creator', 'stock_manager']; // restricted roles
+        if ($me->role === 'branch_manager') {
+            $branches = $all->where('id', $me->branch_id)->values();
+            $roles    = ['order_creator', 'stock_manager'];
         } else {
-            $branches = Branch::where('status', 'active')->get();
-            $roles = ['admin', 'branch_manager', 'stock_manager', 'order_creator'];
+            $branches = $all;
+            $roles    = ['admin', 'branch_manager', 'stock_manager', 'order_creator'];
         }
 
         return view('users.create', compact('branches', 'roles'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, UserService $usersApi)
     {
-        $currentUser = auth()->user();
+        $me = auth()->user();
 
-        // Validation
         $validated = $request->validate([
-            'username' => 'required|string|unique:users|max:255',
-            'email' => 'required|email|unique:users|max:255',
-            'password' => 'required|string|min:8|confirmed',
-            'branch_id' => 'required|exists:branches,id',
-            'role' => 'required|in:admin,stock_manager,order_creator,branch_manager',
+            'username'   => 'required|string|max:255',
+            'email'      => 'required|email|max:255',
+            'password'   => 'required|string|min:8|confirmed',
+            'branch_id'  => 'required|integer|min:1',
+            'role'       => 'required|in:admin,stock_manager,order_creator,branch_manager',
         ]);
 
-        // Branch Manager restrictions
-        if ($currentUser->role === 'branch_manager') {
-            if ($validated['branch_id'] != $currentUser->branch_id) {
+        // Enforce branch_manager limits at UI; API should also enforce
+        if ($me->role === 'branch_manager') {
+            if ((int)$validated['branch_id'] !== (int)$me->branch_id) {
                 return back()->with('error', 'You can only add users to your own branch');
             }
             if (!in_array($validated['role'], ['order_creator', 'stock_manager'])) {
@@ -95,130 +99,100 @@ class UserController extends Controller
             }
         }
 
-        $validated['password'] = Hash::make($validated['password']);
-        $user = User::create($validated);
-
-        return redirect()->route('users.show', $user)
-            ->with('success', 'User created successfully');
+        // Send as-is; hashing is the Users API’s job
+        try {
+            $created = $usersApi->create($validated);
+            return redirect()->route('users.show', $created['id'] ?? $created['data']['id'] ?? null)
+                ->with('success', 'User created successfully');
+        } catch (\Throwable $e) {
+            return back()->withInput()->withErrors(['error'=>$e->getMessage()]);
+        }
     }
 
-    public function edit(User $user)
+    public function edit(int $id, UserService $usersApi, BranchService $branchesApi)
     {
-        $currentUser = auth()->user();
+        $me    = auth()->user();
+        $user  = $usersApi->get($id);
+        $all   = collect($branchesApi->listActive());
 
-        if ($currentUser->role === 'branch_manager') {
-            if ($user->branch_id !== $currentUser->branch_id) {
-                abort(403, 'You can only edit users in your own branch');
+        if ($me->role === 'branch_manager') {
+            if ((int)$user['branch_id'] !== (int)$me->branch_id ||
+                !in_array($user['role'], ['order_creator','stock_manager'])) {
+                abort(403, 'You can only edit stock managers or order creators in your branch');
             }
-            if (!in_array($user->role, ['order_creator', 'stock_manager'])) {
-                abort(403, 'You can only edit stock managers or order creators');
-            }
-
-            $branches = Branch::where('id', $currentUser->branch_id)->get();
-            $roles = ['order_creator', 'stock_manager'];
+            $branches = $all->where('id', $me->branch_id)->values();
+            $roles    = ['order_creator','stock_manager'];
         } else {
-            $branches = Branch::all();
-            $roles = ['admin', 'branch_manager', 'stock_manager', 'order_creator'];
+            $branches = $all;
+            $roles    = ['admin','branch_manager','stock_manager','order_creator'];
         }
 
-        return view('users.edit', compact('user', 'branches', 'roles'));
+        return view('users.edit', compact('user','branches','roles'));
     }
 
-    public function update(Request $request, User $user)
+    public function update(Request $request, int $id, UserService $usersApi)
     {
-        $currentUser = auth()->user();
+        $me = auth()->user();
+        $user = $usersApi->get($id);
 
-        // Branch Manager restrictions
-        if ($currentUser->role === 'branch_manager') {
-            if ($user->branch_id !== $currentUser->branch_id) {
-                return back()->with('error', 'You can only edit users in your own branch');
-            }
-            if (!in_array($user->role, ['order_creator', 'stock_manager'])) {
-                return back()->with('error', 'You can only edit order creators or stock managers');
+        if ($me->role === 'branch_manager') {
+            if ((int)$user['branch_id'] !== (int)$me->branch_id ||
+                !in_array($user['role'], ['order_creator','stock_manager'])) {
+                return back()->with('error', 'You can only edit users in your branch (OC/SM)');
             }
         }
 
         $validated = $request->validate([
-            'username' => 'required|string|max:255|unique:users,username,' . $user->id,
-            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
-            'branch_id' => 'required|exists:branches,id',
-            'role' => 'required|in:admin,branch_manager,stock_manager,order_creator',
+            'username'  => 'required|string|max:255',
+            'email'     => 'required|email|max:255',
+            'branch_id' => 'required|integer|min:1',
+            'role'      => 'required|in:admin,branch_manager,stock_manager,order_creator',
+            'password'  => 'nullable|string|min:8', // if provided, API hashes
         ]);
 
-        if ($request->password) {
-            $validated['password'] = Hash::make($request->password);
+        try {
+            $usersApi->update($id, $validated);
+            return redirect()->route('users.index')->with('success', 'User updated successfully');
+        } catch (\Throwable $e) {
+            return back()->withInput()->withErrors(['error'=>$e->getMessage()]);
         }
-
-        $user->update($validated);
-
-        return redirect()->route('users.index')
-            ->with('success', 'User updated successfully');
     }
 
-    public function show(User $user)
+    public function show(int $id, UserService $usersApi)
     {
+        $user = $usersApi->get($id);
         return view('users.show', compact('user'));
     }
 
-    public function destroy(User $user)
+    public function destroy(int $id, UserService $usersApi)
     {
-        $currentUser = auth()->user();
-
-        if ($user->id === $currentUser->id) {
+        $me = auth()->user();
+        if ($id === $me->id) {
             return back()->with('error', 'Cannot deactivate your own account');
         }
 
-        if ($currentUser->role === 'branch_manager') {
-            if ($user->branch_id !== $currentUser->branch_id) {
-                return back()->with('error', 'You can only deactivate users from your own branch');
-            }
-            if (!in_array($user->role, ['order_creator', 'stock_manager'])) {
-                return back()->with('error', 'You can only deactivate stock managers and order creators');
-            }
+        try {
+            $usersApi->deactivate($id); // API enforces “at least 1 manager/branch”
+            return redirect()->route('users.index')->with('success', 'User deactivated successfully');
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error'=>$e->getMessage()]);
         }
-
-        // ✅ Prevent removing last branch manager
-        if ($user->role === 'branch_manager') {
-            $managerCount = User::where('branch_id', $user->branch_id)
-                ->where('role', 'branch_manager')
-                ->where('status', 'active')
-                ->count();
-
-            if ($managerCount <= 1) {
-                return back()->with('error', 'Each branch must have at least one branch manager');
-            }
-        }
-
-        // Instead of deleting, set status = inactive
-        $user->status = 'inactive';
-        $user->save();
-
-        return redirect()->route('users.index')
-            ->with('success', 'User deactivated successfully');
     }
 
-
-    public function profile()
-    {
-        $user = auth()->user()->load('branch');
-        return view('users.profile', compact('user'));
-    }
-
+    // These can remain local (profile is tied to the current app’s auth)
+    public function profile() { $user = auth()->user(); return view('users.profile', compact('user')); }
     public function updateProfile(Request $request)
     {
         $user = auth()->user();
-
         $validated = $request->validate([
-            'username' => 'required|string|unique:users,username,' . $user->id . '|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id . '|max:255',
+            'username' => 'required|string|max:255|unique:users,username,'.$user->id,
+            'email'    => 'required|email|max:255|unique:users,email,'.$user->id,
+            'password' => 'nullable|string|min:8',
         ]);
-
-        if ($request->password) {
-            $validated['password'] = Hash::make($request->password);
-        }
-
-        $user->update($validated);
-
-        return back()->with('success', 'Profile updated successfully');
+        if (!empty($validated['password'])) $user->password = \Hash::make($validated['password']);
+        $user->username = $validated['username'];
+        $user->email    = $validated['email'];
+        $user->save();
+        return back()->with('success','Profile updated successfully');
     }
 }

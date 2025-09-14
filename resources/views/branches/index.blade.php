@@ -73,7 +73,7 @@
 
                             @if(auth()->user()->role === 'admin')
                                 <td style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="{{ route('branches.edit', $branch->id) }}" class="btn-theme btn-theme-primary btn-sm">
+                                    <a href="{{ route('branches.edit', ['branch' => ($branch->id ?? $branch['id'])]) }}" class="btn-theme btn-theme-primary btn-sm">
                                         <i class="fas fa-edit"></i> Edit
                                     </a>
                                     <form action="{{ route('branches.destroy', $branch->id) }}" method="POST"

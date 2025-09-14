@@ -9,7 +9,7 @@
         <div class="settings-grid">
             <div class="settings-card">
                 <h2><i class="fas fa-store"></i> Branch Information</h2>
-                <form method="POST" action="{{ route('branches.update', $branch) }}">
+                <form method="POST" action="{{ route('branches.update', ['branch' => $branch['id']]) }}">
                     @csrf
                     @method('PUT')
 
@@ -19,7 +19,7 @@
                         <input type="text" 
                                name="name" 
                                id="name" 
-                               value="{{ old('name', $branch->name) }}" 
+                               value="{{ old('name', $branch['name'] ?? '') }}" 
                                required>
                         @error('name') <span class="error">{{ $message }}</span> @enderror
                     </div>
@@ -30,7 +30,7 @@
                         <input type="text" 
                                name="location" 
                                id="location" 
-                               value="{{ old('location', $branch->location) }}" 
+                               value="{{ old('location', $branch['location'] ?? '') }}" 
                                required>
                         @error('location') <span class="error">{{ $message }}</span> @enderror
                     </div>
