@@ -125,6 +125,21 @@ class BranchController extends Controller
             return back()->withErrors(['error' => 'Cannot determine main branch.']);
         }
 
+        // Build a price map for unit_price (selling_price)
+        $priceById = [];
+        try {
+            $activeProducts = collect($productsApi->listActive()); // [{id,name,category_name,selling_price}]
+            $priceById = $activeProducts
+                ->mapWithKeys(fn ($p) => [
+                    (int)($p['id'] ?? 0) => (float)($p['selling_price'] ?? 0.0)
+                ])->all();
+        } catch (\Throwable $e) {
+            // If price map fails, still proceed (unit_price will default to 0.0)
+            \Log::warning('Could not load product prices for branch deactivation; defaulting to 0.0', [
+                'branch_id' => $id, 'err' => $e->getMessage()
+            ]);
+        }
+
         // 1) For every product that has stock at this branch, return it to main via Orders API
         $productIds = $productsApi->listActiveIds();
         $errors = [];
@@ -140,6 +155,8 @@ class BranchController extends Controller
             $qty = (int)($row['available_quantity'] ?? 0);
             if ($qty <= 0) continue;
 
+            $unitPrice = round((float)($priceById[(int)$pid] ?? 0.0), 2);
+
             try {
                 $orderApi->createReturn(
                     fromBranchId: $id,
@@ -147,7 +164,7 @@ class BranchController extends Controller
                     items: [[
                         'product_id' => (int)$pid,
                         'quantity'   => $qty,
-                        'unit_price' => 0.0, // price not needed for quantity move
+                        'unit_price' => $unitPrice,
                     ]],
                     notes: 'Auto return caused by branch deactivation',
                     createdBy: auth()->id(),
@@ -162,7 +179,7 @@ class BranchController extends Controller
             return back()->withErrors(['error' => 'Some returns failed: '.implode(' | ', $errors)]);
         }
 
-        // 2) Deactivate the branch via Branches API (that API may also deactivate its users)
+        // 2) Deactivate the branch
         try {
             $branchesApi->deactivate($id);
         } catch (\Throwable $e) {
@@ -170,6 +187,6 @@ class BranchController extends Controller
         }
 
         return redirect()->route('branches.index')
-            ->with('success', 'Branch deactivated. All stock returned to main via Orders API.');
+            ->with('success', 'Branch deactivated. All stock returned to main branch.');
     }
 }

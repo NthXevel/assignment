@@ -28,35 +28,33 @@ class BranchService
 
     public function listActive(): array
     {
-        return \Cache::remember('branches.active.v2', now()->addMinutes(5), function () {
-            $res = \Http::retry(2, 150)
-                ->timeout($this->timeout)
-                ->connectTimeout(5)
-                ->acceptJson()
-                ->get($this->baseUrl.'/api/branches', ['status' => 'active']);
+        $res = \Http::retry(2, 150)
+            ->timeout($this->timeout)
+            ->connectTimeout(5)
+            ->acceptJson()
+            ->get($this->baseUrl.'/api/branches', ['status' => 'active']);
 
-            if (!$res->ok()) {
-                throw new \RuntimeException('Branch service unavailable');
-            }
+        if (!$res->ok()) {
+            throw new \RuntimeException('Branch service unavailable');
+        }
 
-            $json = $res->json();
+        $json = $res->json();
 
-            // Handle both shapes: {data:[...]} OR [...]
-            $rows = is_array($json) && array_key_exists('data', $json) && is_array($json['data'])
-                ? $json['data']
-                : (is_array($json) ? $json : []);
+        // Handle both shapes: {data:[...]} OR [...]
+        $rows = is_array($json) && array_key_exists('data', $json) && is_array($json['data'])
+            ? $json['data']
+            : (is_array($json) ? $json : []);
 
-            // Normalize fields we actually use
-            return array_map(static function ($b) {
-                return [
-                    'id'       => (int)($b['id'] ?? 0),
-                    'name'     => (string)($b['name'] ?? ''),
-                    'status'   => (string)($b['status'] ?? ''),
-                    'is_main'  => (bool)($b['is_main'] ?? false),
-                    'location' => $b['location'] ?? null,
-                ];
-            }, $rows);
-        });
+        // Normalize fields we actually use
+        return array_map(static function ($b) {
+            return [
+                'id'       => (int)($b['id'] ?? 0),
+                'name'     => (string)($b['name'] ?? ''),
+                'status'   => (string)($b['status'] ?? ''),
+                'is_main'  => (bool)($b['is_main'] ?? false),
+                'location' => $b['location'] ?? null,
+            ];
+        }, $rows);
     }
 
     public function get(int $branchId): array
