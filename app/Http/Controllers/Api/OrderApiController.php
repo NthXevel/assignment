@@ -182,10 +182,6 @@ class OrderApiController extends Controller
             });
         }
 
-        if ($s = $r->get('search')) {
-            $q->where('order_number', 'like', "%{$s}%");
-        }
-
         if ($r->filled('date_from')) $q->whereDate('created_at', '>=', $r->get('date_from'));
         if ($r->filled('date_to'))   $q->whereDate('created_at', '<=', $r->get('date_to'));
 
