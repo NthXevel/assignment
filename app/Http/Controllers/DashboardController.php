@@ -9,7 +9,10 @@ use App\Models\Stock;
 use App\Models\Order;
 use App\Models\Branch;
 use Illuminate\Support\Facades\DB;
-
+use App\Services\ProductService;
+use App\Services\StockService;
+use App\Services\OrderService;
+use App\Services\BranchService;
 
 class DashboardController extends Controller
 {
@@ -18,50 +21,60 @@ class DashboardController extends Controller
         $this->middleware('auth');
     }
     
-    public function index()
+    public function index(
+        ProductService $productsApi,
+        StockService   $stockApi,
+        OrderService   $ordersApi,
+        BranchService  $branchesApi)
     {
         $user = auth()->user();
         
+        $totalProducts = count($productsApi->listActive());
+        $branchesPage  = $branchesApi->paginate(['status'=>'active'], 1, 1);
+        $totalBranches = (int)($branchesPage['total'] ?? 0);
+
+        $lowStockCount = (int)($stockApi->list(['branch_id'=>$user->branch_id, 'low_stock'=>1], 1, 1)['total'] ?? 0);
+        $pendingOrders = (int)($ordersApi->paginate(['status'=>'pending'], 1, 1)['total'] ?? 0);
+        
         $stats = [
-            'total_products' => Product::where('is_active', true)->count(),
-            'low_stock_items' => Stock::whereRaw('quantity <= minimum_threshold')
-                ->where('branch_id', $user->branch_id)
-                ->count(),
-            'pending_orders' => Order::where('status', 'pending')->count(),
-            'total_branches' => Branch::count(),
+            'total_products' => $totalProducts,
+            'low_stock_items'=> $lowStockCount,
+            'pending_orders' => $pendingOrders,
+            'total_branches' => $totalBranches,
         ];
         
-        // Branch-specific stats
-        if (!$user->hasPermission('*')) {
-            $stats['branch_stock_value'] = Stock::where('branch_id', $user->branch_id)
-                ->join('products', 'stocks.product_id', '=', 'products.id')
-                ->sum(DB::raw('stocks.quantity * products.selling_price'));
-                
-            $stats['branch_orders_this_month'] = Order::where('requesting_branch_id', $user->branch_id)
-                ->whereMonth('created_at', now()->month)
-                ->count();
+        // Branch-specific stats (only when user is branch-scoped)
+        if (!method_exists($user, 'hasPermission') || !$user->hasPermission('*')) {
+            $stats['branch_stock_value'] = $stockApi->branchValue((int)$user->branch_id);
+
+            $stats['branch_orders_this_month'] = (int)($ordersApi->paginate([
+                'branch_id' => $user->branch_id,
+                'date_from' => now()->startOfMonth()->toDateString(),
+                'date_to'   => now()->endOfMonth()->toDateString(),
+            ], 1, 1)['total'] ?? 0);
         }
         
-        // Recent activities
-        $recentOrders = Order::with(['requestingBranch', 'supplyingBranch'])
-            ->when(!$user->hasPermission('*'), function($q) use ($user) {
-                $q->where(function($subQ) use ($user) {
-                    $subQ->where('requesting_branch_id', $user->branch_id)
-                         ->orWhere('supplying_branch_id', $user->branch_id);
-                });
-            })
-            ->orderBy('created_at', 'desc')
-            ->limit(5)
-            ->get();
+        // Recent orders (limit 5)
+        $recent = $ordersApi->paginate(
+            ($user->role === 'admin') ? [] : ['branch_id'=>$user->branch_id],
+            1, 5
+        )['data'] ?? [];
         
-        $lowStockItems = Stock::with(['product', 'branch'])
-            ->whereRaw('quantity <= minimum_threshold')
-            ->where('branch_id', $user->branch_id)
-            ->orderBy('quantity', 'asc')
-            ->limit(5)
-            ->get();
-        
-        return view('dashboard', compact('stats', 'recentOrders', 'lowStockItems'));
+        // Low stock items list (limit 5)
+        $lowList = $stockApi->list([
+            'branch_id' => $user->branch_id,
+            'low_stock' => 1,
+            'sort'      => 'quantity_asc',
+        ], 1, 5)['data'] ?? [];
+
+        $branchNames = collect($branchesApi->listActive())
+        ->mapWithKeys(fn ($b) => [(int)($b['id'] ?? 0) => (string)($b['name'] ?? '-')])
+        ->all();
+
+        $recentOrders  = collect($recent)->map(fn($r) => (object)$r);
+        $lowStockItems = collect($lowList)->map(fn($r) => (object)$r);
+
+        return view('dashboard', compact('stats', 'recentOrders', 'lowStockItems', 'branchNames'));
     }
 }
 

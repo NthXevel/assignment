@@ -171,4 +171,83 @@ class StockApiController extends Controller
             'minimum_threshold'  => $stock->minimum_threshold,
         ], 200);
     }
+
+    public function list(Request $r)
+    {
+        $q = \App\Models\Stock::query()->with(['product:id,name,selling_price','branch:id,name']);
+
+        if ($r->filled('branch_id')) $q->where('branch_id', (int)$r->get('branch_id'));
+        if ($r->boolean('low_stock')) $q->whereColumn('quantity', '<=', 'minimum_threshold');
+
+        if ($r->filled('sort')) {
+            if ($r->get('sort') === 'quantity_asc') $q->orderBy('quantity');
+            elseif ($r->get('sort') === 'quantity_desc') $q->orderByDesc('quantity');
+            else $q->latest();
+        } else {
+            $q->latest();
+        }
+
+        $per  = max(1, (int)$r->get('per_page', 10));
+        $page = max(1, (int)$r->get('page', 1));
+        $p    = $q->paginate($per, ['*'], 'page', $page);
+
+        $items = $p->getCollection()->map(fn($s) => [
+            'product_id'         => $s->product_id,
+            'branch_id'          => $s->branch_id,
+            'quantity'           => (int)$s->quantity,
+            'minimum_threshold'  => (int)$s->minimum_threshold,
+            'product'            => ['id'=>$s->product->id, 'name'=>$s->product->name, 'selling_price'=>(float)$s->product->selling_price],
+            'branch'             => ['id'=>$s->branch->id,  'name'=>$s->branch->name],
+        ])->values();
+
+        return response()->json([
+            'data'         => $items,
+            'total'        => $p->total(),
+            'per_page'     => $p->perPage(),
+            'current_page' => $p->currentPage(),
+        ]);
+    }
+
+    public function movements(Request $r)
+    {
+        $q = \App\Models\StockMovement::with(['stock.product:id,name', 'stock.branch:id,name'])->latest();
+
+        if ($r->filled('reason')) $q->where('reason', 'like', '%'.$r->get('reason').'%');
+        if ($r->filled('search')) $q->whereHas('stock.product', fn($qq) => $qq->where('name', 'like', '%'.$r->get('search').'%'));
+        if ($r->filled('branch_id')) $q->whereHas('stock', fn($qq) => $qq->where('branch_id', (int)$r->get('branch_id')));
+
+        $per  = max(1, (int)$r->get('per_page', 10));
+        $page = max(1, (int)$r->get('page', 1));
+        $p    = $q->paginate($per, ['*'], 'page', $page);
+
+        $items = $p->getCollection()->map(fn($m) => [
+            'id'              => $m->id,
+            'stock_id'        => $m->stock_id,
+            'quantity_change' => (int)$m->quantity_change,
+            'balance_after'   => (int)$m->balance_after,
+            'reason'          => $m->reason,
+            'created_at'      => optional($m->created_at)->toISOString(),
+            'product'         => ['id'=>$m->stock->product->id, 'name'=>$m->stock->product->name],
+            'branch'          => ['id'=>$m->stock->branch->id,  'name'=>$m->stock->branch->name],
+        ])->values();
+
+        return response()->json([
+            'data'         => $items,
+            'total'        => $p->total(),
+            'per_page'     => $p->perPage(),
+            'current_page' => $p->currentPage(),
+        ]);
+    }
+
+    public function value(Request $r)
+    {
+        $branchId = (int)$r->get('branch_id');
+        if ($branchId <= 0) return response()->json(['error'=>'branch_id required'], 422);
+
+        $value = \App\Models\Stock::where('branch_id', $branchId)
+            ->join('products', 'stocks.product_id', '=', 'products.id')
+            ->sum(\DB::raw('stocks.quantity * products.selling_price'));
+
+        return response()->json(['value' => (float)$value]);
+    }
 }

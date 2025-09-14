@@ -1,3 +1,4 @@
+<!--Author: Lee Kai Yi -->
 @extends('layouts.app')
 
 @section('content')
@@ -31,7 +32,7 @@
                 <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Cancelled</option>
             </select>
 
-            <input type="text" name="search" placeholder="Search order # or branch..." value="{{ request('search') }}"
+            <input type="text" name="search" placeholder="Search branch, username..." value="{{ request('search') }}"
                 class="form-control">
 
             <button type="submit" class="btn-theme btn-theme-primary">
@@ -64,8 +65,8 @@
                 @forelse ($orders as $order)
                     <tr>
                         <td>{{ $order->order_number }}</td>
-                        <td>{{ $order->requestingBranch->name ?? 'N/A' }}</td>
-                        <td>{{ $order->supplyingBranch->name ?? 'N/A' }}</td>
+                        <td>{{ $branchNameMap[$order->requesting_branch_id] ?? 'N/A' }}</td>
+                        <td>{{ $branchNameMap[$order->supplying_branch_id] ?? 'N/A' }}</td>
 
                         {{-- Status Badge --}}
                         @php

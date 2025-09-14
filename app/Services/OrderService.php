@@ -1,5 +1,5 @@
 <?php
-
+// Author: Lee Kai Yi
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
@@ -47,5 +47,71 @@ class OrderService
             );
         }
         return $res->json();
+    }
+
+    // list orders
+    public function paginate(array $filters = [], int $page = 1, int $perPage = 10): array
+    {
+        $query = array_merge($filters, ['page' => $page, 'per_page' => $perPage]);
+        $res = Http::timeout($this->timeout)->acceptJson()->get($this->base.'/api/orders', $query);
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    public function show(int $id): array
+    {
+        $res = Http::timeout($this->timeout)->acceptJson()->get($this->base."/api/orders/{$id}");
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    // get single order
+    public function get(int $id): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()->get($this->base."/api/orders/{$id}");
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    // create order
+    public function create(array $payload): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()->post($this->base.'/api/orders', $payload);
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    // transitions
+    public function approve(int $id): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()->post($this->base."/api/orders/{$id}/approve");
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    public function ship(int $id): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()->post($this->base."/api/orders/{$id}/ship");
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    public function receive(int $id): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()->post($this->base."/api/orders/{$id}/receive");
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    public function cancel(int $id): array
+    {
+        $res = \Http::timeout($this->timeout)->acceptJson()->post($this->base."/api/orders/{$id}/cancel");
+        if (!$res->successful()) $this->throw($res);
+        return $res->json();
+    }
+
+    private function throw($res): void
+    {
+        throw new \RuntimeException("Orders API {$res->status()}: ".mb_substr((string)$res->body(), 0, 400));
     }
 }

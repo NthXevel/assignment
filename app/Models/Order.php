@@ -45,7 +45,7 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
-    // 🔹 Business logic methods
+    // Business logic methods
     public function approve()
     {
         if ($this->status !== 'pending') {
@@ -136,7 +136,7 @@ class Order extends Model
         });
     }
 
-    // 🔹 Accessor: automatically decrypt order_number when accessed
+    // Accessor: automatically decrypt order_number when accessed
     public function getOrderNumberAttribute($value)
     {
         try {
@@ -146,12 +146,12 @@ class Order extends Model
         }
     }
 
-    // 🔹 Mutator: automatically encrypt order_number when saving
+    // Mutator: automatically encrypt order_number when saving
     public function setOrderNumberAttribute($value)
     {
         $this->attributes['order_number'] = Crypt::encryptString($value);
     }
-    // 🔹 Dynamic total amount (calculated from items)
+    // Dynamic total amount (calculated from items)
     public function getTotalAmountAttribute()
     {
         return $this->items->sum('total_price');

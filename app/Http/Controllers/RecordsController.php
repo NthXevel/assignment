@@ -1,67 +1,106 @@
 <?php
-
+// Author: Lee Kai Yi
 namespace App\Http\Controllers;
 
 use App\Models\StockMovement;
 use App\Models\Order;
 use Illuminate\Http\Request;
+use App\Services\StockService;
+use App\Services\OrderService;
+use App\Services\BranchService;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class RecordsController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, StockService $stockApi, OrderService $ordersApi)
     {
-        // query param values
         $search = $request->input('search');
         $reason = $request->input('reason');
 
-        // --------------- Stock Movements query ---------------
-        $stockQuery = StockMovement::with(['stock.product', 'stock.branch'])->latest();
+        // -------- Stock Movements (via API) --------
+        $movFilters = [];
+        if ($reason) $movFilters['reason'] = $reason;   // substring match on API side
+        if ($search) $movFilters['search'] = $search;
 
-        if ($reason) {
-            // only apply reason filter for stock movements if it matches stock reasons
-            // (this will simply apply to the reason column on stock_movements)
-            $stockQuery->where('reason', $reason);
+        $movResp = $stockApi->movements($movFilters, (int)$request->get('stocks_page', 1), 10);
+
+        $stockMovements = new LengthAwarePaginator(
+            collect($movResp['data'] ?? [])->map(fn($r) => (object)$r),
+            (int)($movResp['total'] ?? 0),
+            (int)($movResp['per_page'] ?? 10),
+            (int)($movResp['current_page'] ?? 1),
+            ['path' => $request->url(), 'pageName' => 'stocks_page']
+        );
+
+        // -------- Orders (received + canceled) via API --------
+        $statuses = 'received,canceled';
+        if ($reason && in_array(strtolower($reason), ['shipped','canceled','cancelled','received'])) {
+            $statuses = (strtolower($reason) === 'cancelled') ? 'canceled' : strtolower($reason);
         }
 
-        if ($search) {
-            // search by product name (via the related stock -> product)
-            $stockQuery->whereHas('stock.product', function ($q) use ($search) {
-                $q->where('name', 'like', '%' . $search . '%');
-            });
-        }
+        $orderFilters = ['statuses' => $statuses];
+        if ($search) $orderFilters['search'] = $search;
 
-        // paginate stock movements; use a custom page name so it doesn't conflict with orders pagination
-        $stockMovements = $stockQuery->paginate(10, ['*'], 'stocks_page')->appends($request->query());
+        $ordResp = $ordersApi->paginate($orderFilters, (int)$request->get('orders_page', 1), 10);
 
-        // --------------- Orders query (only shipped + canceled) ---------------
-        $orderQuery = Order::with(['requestingBranch', 'supplyingBranch'])
-            ->whereIn('status', ['received', 'canceled'])
-            ->latest();
+        $orders = new LengthAwarePaginator(
+            collect($ordResp['data'] ?? [])->map(fn($r) => (object)$r),
+            (int)($ordResp['total'] ?? 0),
+            (int)($ordResp['per_page'] ?? 10),
+            (int)($ordResp['current_page'] ?? 1),
+            ['path' => $request->url(), 'pageName' => 'orders_page']
+        );
 
-        if ($search) {
-            // support searching orders by order_number or by branch name
-            $orderQuery->where(function ($q) use ($search) {
-                $q->where('order_number', 'like', '%' . $search . '%')
-                  ->orWhereHas('requestingBranch', function ($qq) use ($search) {
-                      $qq->where('name', 'like', '%' . $search . '%');
-                  })
-                  ->orWhereHas('supplyingBranch', function ($qq) use ($search) {
-                      $qq->where('name', 'like', '%' . $search . '%');
-                  });
-            });
-        }
-
-        // if reason is provided and matches order statuses, filter orders by status
-        if ($reason && in_array(strtolower($reason), ['shipped', 'canceled', 'cancelled'])) {
-            // normalize possible 'cancelled' spelling
-            $status = strtolower($reason) === 'cancelled' ? 'canceled' : strtolower($reason);
-            $orderQuery->where('status', $status);
-        }
-
-        $orders = $orderQuery->paginate(10, ['*'], 'orders_page')->appends($request->query());
-
-        // Return both variables that your Blade expects
         return view('records.index', compact('stockMovements', 'orders'));
+    }
+
+    public function stock(Request $request, StockService $stockApi)
+    {
+        $filters = [];
+        if ($r = $request->input('reason')) $filters['reason'] = $r;
+        if ($s = $request->input('search')) $filters['search'] = $s;
+        if ($b = $request->input('branch_id')) $filters['branch_id'] = (int)$b;
+
+        $resp = $stockApi->movements($filters, (int)$request->get('page', 1), 10);
+
+        $stockMovements = new LengthAwarePaginator(
+            collect($resp['data'] ?? [])->map(fn($r) => (object)$r),
+            (int)($resp['total'] ?? 0),
+            (int)($resp['per_page'] ?? 10),
+            (int)($resp['current_page'] ?? 1),
+            ['path' => $request->url()]
+        );
+
+        return view('records.stock', compact('stockMovements'));
+    }
+
+    public function orders(Request $request, OrderService $ordersApi, BranchService $branchesApi)
+    {
+        // statuses: default to received,canceled
+        $statuses = $request->filled('status')
+            ? $request->input('status')
+            : 'received,canceled';
+
+        $filters = ['statuses' => $statuses];
+        if ($s = $request->input('search')) $filters['search'] = $s;
+        if ($b = $request->input('branch_id')) $filters['branch_id'] = (int)$b;
+
+        $resp = $ordersApi->paginate($filters, (int)$request->get('page', 1), 10);
+
+        $orders = new LengthAwarePaginator(
+            collect($resp['data'] ?? [])->map(fn($r) => (object)$r),
+            (int)($resp['total'] ?? 0),
+            (int)($resp['per_page'] ?? 10),
+            (int)($resp['current_page'] ?? 1),
+            ['path' => $request->url()]
+        );
+
+        // Map branch names for display
+        $branchNameMap = collect($branchesApi->listActive())
+            ->mapWithKeys(fn($b) => [ (int)$b['id'] => (string)$b['name'] ])
+            ->all();
+
+        return view('records.orders', compact('orders', 'branchNameMap'));
     }
 }
     

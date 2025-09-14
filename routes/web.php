@@ -108,8 +108,6 @@ Route::middleware(['auth'])->group(function () {
     // -----------------------------
     Route::prefix('records')->name('records.')->group(function () {
         Route::get('/', [App\Http\Controllers\RecordsController::class, 'index'])->name('index');
-        Route::get('/stock', [App\Http\Controllers\RecordsController::class, 'stock'])->name('stock');
-        Route::get('/orders', [App\Http\Controllers\RecordsController::class, 'orders'])->name('orders');
     });
 
     // -----------------------------

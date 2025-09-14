@@ -532,6 +532,8 @@
                         Stock Management</a></li>
                 <li class="nav-item"><a href="{{ route('orders.index') }}" class="nav-link"><i
                             class="fas fa-shopping-cart"></i> Orders</a></li>
+                <li class="nav-item"><a href="{{ route('records.index') }}" class="nav-link"><i
+                            class="fas fa-history"></i> Records</a></li>
                 <li class="nav-item"><a href="{{ route('branches.index') }}" class="nav-link"><i
                             class="fas fa-store"></i> Branches</a></li>
                 {{-- Show User Management only for admin or stock_manager --}}

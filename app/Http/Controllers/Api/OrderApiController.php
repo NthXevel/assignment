@@ -1,5 +1,5 @@
 <?php
-
+// Author: Lee Kai Yi
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -126,14 +126,18 @@ class OrderApiController extends Controller
             //$stockApi->reserve($order->id, $order->supplying_branch_id, $items);
             try {
                 $stockApi->reserve($order->id, $order->supplying_branch_id, $items);
+                $order->status       = 'approved';
+                $order->approved_at  = now();
+                $order->save();
             } catch (\Illuminate\Http\Client\RequestException $e) {
                 return response()->json([
                     'error' => $e->response?->json('error') ?? 'Reserve failed'
                 ], 422);
             }
 
-            // ship (status only)
+            // ship
             $order->status = 'shipped';
+            $order->shipped_at  = now();
             $order->save();
 
             // receive
@@ -147,6 +151,7 @@ class OrderApiController extends Controller
             }
 
             $order->status = 'received';
+            $order->received_at  = now();
             $order->save();
         }
 
@@ -154,5 +159,173 @@ class OrderApiController extends Controller
             'order_id' => $order->id,
             'status'   => $order->status,
         ], 201);
+    }
+
+    // GET /api/orders
+    public function index(Request $r)
+    {
+        $q = Order::query()->withCount('items');
+
+        // Filters
+        if ($r->filled('statuses')) {
+            $statuses = array_filter(array_map('trim', explode(',', $r->get('statuses'))));
+            if ($statuses) $q->whereIn('status', $statuses);
+        } elseif ($r->filled('status')) {
+            $q->where('status', $r->get('status'));
+        }
+
+        if ($r->filled('branch_id')) {
+            $bid = (int)$r->get('branch_id');
+            $q->where(function ($qq) use ($bid) {
+                $qq->where('requesting_branch_id', $bid)
+                ->orWhere('supplying_branch_id', $bid);
+            });
+        }
+
+        if ($s = $r->get('search')) {
+            $q->where('order_number', 'like', "%{$s}%");
+        }
+
+        if ($r->filled('date_from')) $q->whereDate('created_at', '>=', $r->get('date_from'));
+        if ($r->filled('date_to'))   $q->whereDate('created_at', '<=', $r->get('date_to'));
+
+        $per  = max(1, (int)$r->get('per_page', 10));
+        $page = max(1, (int)$r->get('page', 1));
+        $p    = $q->orderByDesc('created_at')->paginate($per, ['*'], 'page', $page);
+
+        $items = $p->getCollection()->map(fn($o) => [
+            'id'                    => $o->id,
+            'order_number'          => $o->order_number,
+            'status'                => $o->status,
+            'priority'              => $o->priority,
+            'requesting_branch_id'  => $o->requesting_branch_id,
+            'supplying_branch_id'   => $o->supplying_branch_id,
+            'created_by'            => $o->created_by,
+            'items_count'           => $o->items_count,
+            'created_at'            => optional($o->created_at)->toISOString(),
+        ])->values();
+
+        return response()->json([
+            'data'         => $items,
+            'total'        => $p->total(),
+            'per_page'     => $p->perPage(),
+            'current_page' => $p->currentPage(),
+        ]);
+    }
+
+    // GET /api/orders/{id}
+    public function show(int $id)
+    {
+        $o = Order::with(['items', 'requestingBranch:id,name', 'supplyingBranch:id,name'])->find($id);
+        if (!$o) return response()->json(['error' => 'Not found'], 404);
+
+        return response()->json([
+            'id'                   => $o->id,
+            'order_number'         => $o->order_number,
+            'status'               => $o->status,
+            'priority'             => $o->priority,
+            'requesting_branch_id' => $o->requesting_branch_id,
+            'supplying_branch_id'  => $o->supplying_branch_id,
+            'created_by'           => $o->created_by,
+            'notes'                => $o->notes,
+            'items' => $o->items->map(fn($i) => [
+                'product_id'  => $i->product_id,
+                'quantity'    => (int)$i->quantity,
+                'unit_price'  => (float)$i->unit_price,
+                'total_price' => (float)$i->total_price,
+            ])->values(),
+            'created_at' => optional($o->created_at)->toISOString(),
+        ]);
+    }
+
+    // POST /api/orders/{id}/approve
+    public function approve(int $id, StockService $stockApi)
+    {
+        $order = Order::with('items')->find($id);
+        if (!$order) return response()->json(['error'=>'Not found'], 404);
+        if ($order->status !== 'pending') {
+            return response()->json(['error'=>'Only pending orders can be approved'], 422);
+        }
+
+        $items = $order->items->map(fn($i) => [
+            'product_id' => $i->product_id,
+            'quantity'   => (int)$i->quantity,
+        ])->values()->all();
+
+        try {
+            $stockApi->reserve($order->id, $order->supplying_branch_id, $items);
+            $order->status = 'approved';
+            $order->approved_at  = now();
+            $order->save();
+            return response()->json(['ok'=>true, 'status'=>$order->status]);
+        } catch (\Throwable $e) {
+            return response()->json(['error'=>$e->getMessage()], 422);
+        }
+    }
+
+    // POST /api/orders/{id}/ship
+    public function ship(int $id)
+    {
+        $order = Order::find($id);
+        if (!$order) return response()->json(['error'=>'Not found'], 404);
+        if ($order->status !== 'approved') {
+            return response()->json(['error'=>'Order must be approved before shipping'], 422);
+        }
+        $order->status = 'shipped';
+        $order->shipped_at  = now();
+        $order->save();
+        return response()->json(['ok'=>true, 'status'=>$order->status]);
+    }
+
+    // POST /api/orders/{id}/receive
+    public function receive(int $id, StockService $stockApi)
+    {
+        $order = Order::with('items')->find($id);
+        if (!$order) return response()->json(['error'=>'Not found'], 404);
+        if ($order->status !== 'shipped') {
+            return response()->json(['error'=>'Order must be shipped before receiving'], 422);
+        }
+
+        $items = $order->items->map(fn($i) => [
+            'product_id' => $i->product_id,
+            'quantity'   => (int)$i->quantity,
+        ])->values()->all();
+
+        try {
+            $stockApi->receive($order->id, $order->requesting_branch_id, $items);
+            $order->status = 'received';
+            $order->received_at  = now();
+            $order->save();
+            return response()->json(['ok'=>true, 'status'=>$order->status]);
+        } catch (\Throwable $e) {
+            return response()->json(['error'=>'Failed to receive: '.$e->getMessage()], 422);
+        }
+    }
+
+    // POST /api/orders/{id}/cancel
+    public function cancel(int $id, StockService $stockApi)
+    {
+        $order = Order::with('items')->find($id);
+        if (!$order) return response()->json(['error'=>'Not found'], 404);
+        if (!in_array($order->status, ['pending','approved'], true)) {
+            return response()->json(['error'=>'Cannot cancel shipped or received orders'], 422);
+        }
+
+        try {
+            DB::transaction(function () use ($order, $stockApi) {
+                if ($order->status === 'approved') {
+                    $items = $order->items->map(fn($i) => [
+                        'product_id' => $i->product_id,
+                        'quantity'   => (int)$i->quantity,
+                    ])->values()->all();
+                    $stockApi->release($order->id, $order->supplying_branch_id, $items);
+                }
+                $order->status = 'cancelled';
+                $order->save();
+            });
+            return response()->json(['ok'=>true, 'status'=>$order->status]);
+        } catch (\Throwable $e) {
+            return response()->json(['error'=>'Failed to cancel: '.$e->getMessage()], 422);
+        }
     }
 }

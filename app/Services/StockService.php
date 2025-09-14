@@ -85,7 +85,30 @@ class StockService
         return $res->json();
     }
 
-    public function list(array $filters = []): LengthAwarePaginator
+    public function list(array $filters = [], int $page = 1, int $perPage = 10): array
+    {
+        $query = array_merge($filters, ['page' => $page, 'per_page' => $perPage]);
+        $res = Http::timeout($this->timeout)->acceptJson()->get($this->baseUrl.'/api/stock/list', $query);
+        if (!$res->ok()) throw new \RuntimeException('Stock service unavailable');
+        return $res->json();
+    }
+
+    public function movements(array $filters = [], int $page = 1, int $perPage = 10): array
+    {
+        $query = array_merge($filters, ['page' => $page, 'per_page' => $perPage]);
+        $res = Http::timeout($this->timeout)->acceptJson()->get($this->baseUrl.'/api/stock/movements', $query);
+        if (!$res->ok()) throw new \RuntimeException('Stock service unavailable');
+        return $res->json();
+    }
+
+    public function branchValue(int $branchId): float
+    {
+        $res = Http::timeout($this->timeout)->acceptJson()->get($this->baseUrl.'/api/stock/value', ['branch_id' => $branchId]);
+        if (!$res->ok()) throw new \RuntimeException('Stock service unavailable');
+        return (float)($res->json('value') ?? 0);
+    }
+
+    /* public function list(array $filters = []): LengthAwarePaginator
     {
         $query = Stock::with(['product', 'branch'])
             ->whereHas('product', function ($q) {
@@ -109,7 +132,7 @@ class StockService
         }
 
         return $query->paginate($filters['per_page'] ?? 15);
-    }
+    } */
 
     public function create(array $data): Stock
     {

@@ -1,5 +1,5 @@
 <?php
-
+// Author: Lee Kai Yi
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -13,6 +13,7 @@ use App\Strategies\Orders\UrgentOrderStrategy;
 use App\Services\StockService;
 use App\Services\ProductService;
 use App\Services\BranchService;
+use App\Services\UserService;
 
 class OrderController extends Controller
 {
@@ -22,16 +23,15 @@ class OrderController extends Controller
     }
 
     // List orders - Updated to show latest first
-    public function index(Request $request, BranchService $branchesApi)
+    public function index(Request $request, BranchService $branchesApi, UserService $usersApi)
     {
         $user = auth()->user();
 
-        $query = Order::with(['requestingBranch', 'supplyingBranch', 'creator'])
-            ->orderBy('created_at', 'desc')
-            ->when($user->role !== 'admin', function ($q) use ($user) {
-                $q->where('requesting_branch_id', $user->branch_id)
-                  ->orWhere('supplying_branch_id', $user->branch_id);
-            });
+        $query = Order::orderByDesc('created_at')
+            ->when($user->role !== 'admin', fn($q) =>
+                $q->where(fn($qq)=>$qq
+                    ->where('requesting_branch_id',$user->branch_id)
+                    ->orWhere('supplying_branch_id',$user->branch_id)));
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -45,28 +45,55 @@ class OrderController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('order_number', 'like', "%{$search}%")
-                  ->orWhereHas('creator', fn($sub) => $sub->where('username', 'like', "%{$search}%"))
-                  ->orWhereHas('requestingBranch', fn($sub) => $sub->where('name', 'like', "%{$search}%"))
-                  ->orWhereHas('supplyingBranch', fn($sub) => $sub->where('name', 'like', "%{$search}%"));
-            });
+            $term = trim($request->search);
+            if ($term !== '') {
+                $query->where(function ($q) use ($term, $branchesApi, $usersApi) {
+                    $matched = false;
+
+                    // branch name -> ids via Branch API
+                    try {
+                        $branchIds = collect($branchesApi->listActive())
+                            ->filter(fn($b) => stripos($b['name'] ?? '', $term) !== false)
+                            ->pluck('id')->map(fn($v)=>(int)$v)->all();
+
+                        if ($branchIds) {
+                            $q->orWhereIn('requesting_branch_id', $branchIds)
+                            ->orWhereIn('supplying_branch_id', $branchIds);
+                        }
+                    } catch (\Throwable $e) {
+                        
+                    }
+
+                    // creator username -> ids via Users API
+                    try {
+                        $usersPage = $usersApi->paginate(['search' => $term, 'per_page' => 100], 1, 100);
+                        $userIds   = collect($usersPage['data'] ?? [])->pluck('id')->map(fn($v)=>(int)$v)->all();
+                        if ($userIds) {
+                            $q->orWhereIn('created_by', $userIds);
+                        }
+                    } catch (\Throwable $e) {
+                        // ignore
+                    }
+
+                    // If nothing matched, force empty result
+                    if (!$matched) {
+                        $q->whereRaw('0 = 1'); // ensures no records returned
+                    }
+                });
+            }
         }
 
         $orders = $query->paginate(10)->withQueryString();
 
-        // Admin filter dropdown; fetched via API
-        $branches = collect();
-        if ($user->role === 'admin') {
-            try {
-                $branches = collect($branchesApi->listActive())->map(fn($b) => (object)$b);
-            } catch (\Throwable $e) {
-                $branches = collect(); // UI can show a warning
-            }
-        }
+        // resolve branch names via BranchService
+        $ids = $orders->pluck('requesting_branch_id')
+                    ->merge($orders->pluck('supplying_branch_id'))
+                    ->unique()->values()->all();
+                    
+        $branchNameMap = collect($branchesApi->listActive())
+            ->pluck('name','id'); // [id => name]
 
-        return view('orders.index', compact('orders', 'branches'));
+        return view('orders.index', compact('orders', 'branchNameMap'));
     }
 
     // Show create order form (products & branches from APIs)
@@ -130,7 +157,7 @@ class OrderController extends Controller
             return back()->withErrors(['items.0.quantity' => 'Insufficient stock at selected branch'])->withInput();
         }
 
-        // Create order + item (Orders owns its DB)
+        // Create order + item
         $order = DB::transaction(function () use ($request, $product, $productId, $quantity, $user) {
             $order = Order::create([
                 'order_number'         => 'ORD-'.strtoupper(Str::random(10)),
@@ -195,8 +222,10 @@ class OrderController extends Controller
 
             $stockApi->reserve($order->id, $order->supplying_branch_id, $items);
 
-            $order->status = 'approved';
-            $order->save();
+            $order->fill([
+                'status'      => 'approved',
+                'approved_at' => now(),
+            ])->save();
 
             return back()->with('success', 'Order approved and stock reserved!');
         } catch (\Throwable $e) {
@@ -228,8 +257,10 @@ class OrderController extends Controller
             return back()->with('error', "Send urgent's order first");
         }
 
-        $order->status = 'shipped';
-        $order->save();
+        $order->fill([
+            'status'     => 'shipped',
+            'shipped_at' => now(),
+        ])->save();
 
         return back()->with('success', 'Order shipped successfully!');
     }
@@ -253,8 +284,10 @@ class OrderController extends Controller
 
             $stockApi->receive($order->id, $order->requesting_branch_id, $items);
 
-            $order->status = 'received';
-            $order->save();
+            $order->fill([
+                'status'      => 'received',
+                'received_at' => now(),
+            ])->save();
 
             return back()->with('success', 'Order received and stock updated!');
         } catch (\Throwable $e) {
