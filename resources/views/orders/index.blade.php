@@ -32,7 +32,7 @@
                 <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Cancelled</option>
             </select>
 
-            <input type="text" name="search" placeholder="Search branch, username..." value="{{ request('search') }}"
+            <input type="text" name="search" placeholder="Search branch" value="{{ request('search') }}"
                 class="form-control">
 
             <button type="submit" class="btn-theme btn-theme-primary">

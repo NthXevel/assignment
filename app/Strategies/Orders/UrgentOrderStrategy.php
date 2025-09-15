@@ -8,13 +8,9 @@ class UrgentOrderStrategy implements OrderProcessingStrategy
 {
     public function processOrder(Order $order): bool
     {
-        if ($order->creator && $order->creator->hasPermission('approve_urgent_orders')) {
-            $order->approve();
-        } else {
-            $order->status = 'pending';
-            $order->priority = 'urgent';
-        }
-
+        $order->status = 'pending';
+        $order->priority = 'urgent';
+        
         $order->save();
         return true;
     }

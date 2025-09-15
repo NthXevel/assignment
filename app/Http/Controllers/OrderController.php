@@ -47,7 +47,7 @@ class OrderController extends Controller
         if ($request->filled('search')) {
             $term = trim($request->search);
             if ($term !== '') {
-                $query->where(function ($q) use ($term, $branchesApi, $usersApi) {
+                $query->where(function ($q) use ($term, $branchesApi) {
                     $matched = false;
 
                     // branch name -> ids via Branch API
@@ -62,17 +62,6 @@ class OrderController extends Controller
                         }
                     } catch (\Throwable $e) {
                         
-                    }
-
-                    // creator username -> ids via Users API
-                    try {
-                        $usersPage = $usersApi->paginate(['search' => $term, 'per_page' => 100], 1, 100);
-                        $userIds   = collect($usersPage['data'] ?? [])->pluck('id')->map(fn($v)=>(int)$v)->all();
-                        if ($userIds) {
-                            $q->orWhereIn('created_by', $userIds);
-                        }
-                    } catch (\Throwable $e) {
-                        // ignore
                     }
 
                     // If nothing matched, force empty result
