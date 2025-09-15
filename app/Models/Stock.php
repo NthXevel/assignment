@@ -1,5 +1,5 @@
 <?php
-
+// Author: Leong Kee Zheng
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;

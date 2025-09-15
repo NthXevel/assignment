@@ -1,5 +1,5 @@
 <?php
-
+// Author: Ho Jie Han
 namespace App\Services;
 
 use App\Models\Product;
@@ -22,7 +22,7 @@ class ProductService
         $res = Http::retry(2, 150)->timeout($this->timeout)->connectTimeout(10)
             ->get($this->baseUrl.'/api/products', [
                 'status' => 'active',
-                'fields' => 'id,name,category_name,selling_price',
+                'fields' => 'id,name,category_name,cost_price,selling_price',
             ]);
         if (!$res->ok()) throw new \RuntimeException('Product service unavailable');
         return $res->json();

@@ -1,3 +1,4 @@
+<!-- Author: Ho Jie Han -->
 @extends('layouts.app')
 
 @section('title', 'Product Factories')

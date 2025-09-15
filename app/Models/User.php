@@ -1,5 +1,5 @@
 <?php
-
+// Author: Clive Lee Ee Xuan
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;

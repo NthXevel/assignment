@@ -14,6 +14,7 @@ use App\Services\StockService;
 use App\Services\ProductService;
 use App\Services\BranchService;
 use App\Services\UserService;
+use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
@@ -216,6 +217,8 @@ class OrderController extends Controller
                 'approved_at' => now(),
             ])->save();
 
+            $this->logStatusChange($order, 'approve', request());
+
             return back()->with('success', 'Order approved and stock reserved!');
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
@@ -251,6 +254,8 @@ class OrderController extends Controller
             'shipped_at' => now(),
         ])->save();
 
+        $this->logStatusChange($order, 'ship', request());
+
         return back()->with('success', 'Order shipped successfully!');
     }
 
@@ -277,6 +282,8 @@ class OrderController extends Controller
                 'status'      => 'received',
                 'received_at' => now(),
             ])->save();
+
+            $this->logStatusChange($order, 'receive', request());
 
             return back()->with('success', 'Order received and stock updated!');
         } catch (\Throwable $e) {
@@ -306,6 +313,8 @@ class OrderController extends Controller
                 $order->save();
             });
 
+            $this->logStatusChange($order, 'cancel', request());
+            
             return back()->with('success', 'Order cancelled successfully!');
         } catch (\Throwable $e) {
             return back()->with('error', 'Failed to cancel order: '.$e->getMessage());
@@ -327,5 +336,19 @@ class OrderController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Stock service unavailable'], 502);
         }
+    }
+
+    private function logStatusChange(Order $order, string $action, Request $request): void
+    {
+        Log::channel('security')->info('Order status change', [
+            'order_id'  => $order->id,
+            'action'    => $action,                   // e.g., 'approve','ship','receive','cancel'
+            'status'    => $order->status,            // new status
+            'by_user'   => optional($request->user())->id,
+            'branch_id' => optional($request->user())->branch_id,
+            'ip'        => $request->ip(),
+            'ua'        => $request->userAgent(),
+            'at'        => now()->toIso8601String(),
+        ]);
     }
 }

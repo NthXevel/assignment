@@ -50,16 +50,21 @@ Route::prefix('branches')->group(function () {
 
 // Orders
 Route::prefix('orders')->group(function () {
-    // specialized flow
-    Route::post('return',    [OrderApiController::class, 'createReturn']);
+    // READ endpoints (more lenient)
+    Route::middleware('throttle:orders-read')->group(function () {
+        Route::get('/',    [OrderApiController::class, 'index']); // list
+        Route::get('{id}', [OrderApiController::class, 'show']);  // read
+    });
 
-    Route::get('/',          [OrderApiController::class, 'index']);   // list
-    Route::post('/',         [OrderApiController::class, 'store']);   // create
-    Route::get('{id}',       [OrderApiController::class, 'show']);    // read
+    // WRITE endpoints (stricter)
+    Route::middleware('throttle:orders-write')->group(function () {
+        Route::post('/',           [OrderApiController::class, 'store']);       // create
+        Route::post('return',      [OrderApiController::class, 'createReturn']); // special flow
 
-    // transitions
-    Route::post('{id}/approve', [OrderApiController::class, 'approve']);
-    Route::post('{id}/ship',    [OrderApiController::class, 'ship']);
-    Route::post('{id}/receive', [OrderApiController::class, 'receive']);
-    Route::post('{id}/cancel',  [OrderApiController::class, 'cancel']);
+        // transitions
+        Route::post('{id}/approve', [OrderApiController::class, 'approve']);
+        Route::post('{id}/ship',    [OrderApiController::class, 'ship']);
+        Route::post('{id}/receive', [OrderApiController::class, 'receive']);
+        Route::post('{id}/cancel',  [OrderApiController::class, 'cancel']);
+    });
 });

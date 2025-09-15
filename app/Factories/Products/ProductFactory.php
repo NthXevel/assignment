@@ -1,5 +1,5 @@
 <?php
-
+// Author: Ho Jie Han
 namespace App\Factories\Products;
 
 use App\Models\Product;

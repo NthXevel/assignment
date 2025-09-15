@@ -1,5 +1,5 @@
 <?php
-
+// Author: Leong Kee Zheng
 namespace App\Services;
 
 use App\Models\Stock;
