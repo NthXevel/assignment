@@ -116,7 +116,7 @@ class OrderController extends Controller
 
     public function store(Request $request, ProductService $productsApi, StockService $stockApi)
     {
-        // Validate format; existence is checked via APIs
+        // Validate format; existence is checked
         $request->validate([
             'items.0.product_id'   => 'required|integer',
             'items.0.quantity'     => 'required|integer|min:1',

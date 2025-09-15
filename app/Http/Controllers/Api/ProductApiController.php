@@ -18,7 +18,6 @@ class ProductApiController extends Controller
 
         $q = Product::query();
         if ($status === 'active') {
-            // use the correct column in your schema: is_active or status
             if (\Schema::hasColumn('products', 'is_active')) {
                 $q->where('is_active', 1);
             } elseif (\Schema::hasColumn('products', 'status')) {
@@ -62,7 +61,7 @@ class ProductApiController extends Controller
             'name'          => $p->name,
             'category_name' => optional($p->category)->name,
             'selling_price' => $p->selling_price,
-            'status'        => $p->status,
+            'is_active'     => $p->is_active,
         ]);
     }
 
