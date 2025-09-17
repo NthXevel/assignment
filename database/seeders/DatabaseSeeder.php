@@ -22,9 +22,9 @@ class DatabaseSeeder extends Seeder
             ProductCategorySeeder::class,  // product categories
             ProductSeeder::class,          // products
             StockSeeder::class,            // stocks
-            //StockMovementSeeder::class,    // stock movements
-            //OrderSeeder::class,            // orders
-            //OrderItemSeeder::class,        // 🔹 add this to match order_items migration
+            OrderSeeder::class,            // orders
+            OrderItemSeeder::class,        // order_items
+            StockMovementSeeder::class,    // stock movements
         ]);
 
         $this->command->info('✅ Database seeded successfully!');

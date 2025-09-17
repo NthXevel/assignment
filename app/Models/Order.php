@@ -22,6 +22,8 @@ class Order extends Model
         'approved_at',
         'shipped_at',
         'received_at',
+        'sla_due_at',
+        'total_amount',
     ];
 
     // Relationships

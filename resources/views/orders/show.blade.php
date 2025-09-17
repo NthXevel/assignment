@@ -42,7 +42,17 @@
                     <p><strong>Requesting Branch:</strong> {{ $order->requestingBranch->name }}</p>
                     <p><strong>Supplying Branch:</strong> {{ $order->supplyingBranch->name }}</p>
                     <p><strong>Notes:</strong> {{ $order->notes ?? '-' }}</p>
-                    <p><strong>Created At:</strong> {{ $order->created_at->format('Y-m-d H:i') }}</p>
+                    <p><strong>Created At:</strong>  {{ optional($order->created_at)->format('Y-m-d H:i') }}</p>
+                    @if($order->approved_at)
+                        <p><strong>Approved At:</strong> {{ \Illuminate\Support\Carbon::parse($order->approved_at)->format('Y-m-d H:i') }}</p>
+                    @endif
+                    @if($order->shipped_at)
+                        <p><strong>Shipped At:</strong>  {{ \Illuminate\Support\Carbon::parse($order->shipped_at)->format('Y-m-d H:i') }}</p>
+                    @endif
+                    @if($order->received_at)
+                        <p><strong>Received At:</strong> {{ \Illuminate\Support\Carbon::parse($order->received_at)->format('Y-m-d H:i') }}</p>
+                    @endif
+                    
                 </div>
 
                 {{-- Order Items --}}

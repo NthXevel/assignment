@@ -106,13 +106,26 @@ class OrderController extends Controller
 
     public function store(Request $request, ProductService $productsApi, StockService $stockApi)
     {
-        // Validate format; existence is checked
+        /* // Validate format; existence is checked
         $request->validate([
             'items.0.product_id'   => 'required|integer',
             'items.0.quantity'     => 'required|integer|min:1',
             'supplying_branch_id'  => 'required|integer',
             'priority'             => 'required|in:standard,urgent',
             'notes'                => 'nullable|string|max:1000',
+        ]); */
+
+        // Validate array of items
+        $request->validate([
+            'items'                  => ['required','array','min:1'],
+            'items.*.product_id'     => ['required','integer'],
+            'items.*.quantity'       => ['required','integer','min:1'],
+            'supplying_branch_id'    => ['required','integer'],
+            'priority'               => ['required','in:standard,urgent'],
+            'notes'                  => ['nullable','string','max:1000'],
+        ], [], [
+            'items.*.product_id' => 'product',
+            'items.*.quantity'   => 'quantity',
         ]);
 
         $user = auth()->user();
@@ -125,48 +138,75 @@ class OrderController extends Controller
             return back()->withErrors(['supplying_branch_id' => 'Cannot request from your own branch.']);
         }
 
-        $productId = (int) $request->input('items.0.product_id');
-        $quantity  = (int) $request->input('items.0.quantity');
+        // Normalize items: merge duplicate product_ids
+        $raw = collect($request->input('items'))->filter(fn($r) => !empty($r['product_id']));
+        $items = $raw->groupBy(fn($r) => (int)$r['product_id'])
+            ->map(fn($g) => [
+                'product_id' => (int)$g->first()['product_id'],
+                'quantity'   => (int)$g->sum('quantity'),
+            ])->values();
 
-        // Fetch product via Product API (price/existence)
-        try {
-            $product = $productsApi->get($productId);
-        } catch (\Throwable $e) {
-            return back()->withErrors(['items.0.product_id' => 'Invalid product selected'])->withInput();
+        if ($items->isEmpty()) {
+            return back()->withErrors(['items' => 'Please add at least one product.'])->withInput();
+        }
+        
+        // Resolve product prices via Product API + stock per item via Stock API
+        $supplyingBranchId = (int)$request->supplying_branch_id;
+        $lineItems = [];      // rows for order_items
+        $total     = 0.0;
+
+        foreach ($items as $row) {
+            // Product data (price / existence)
+            try {
+                $product = $productsApi->get($row['product_id']);
+            } catch (\Throwable $e) {
+                return back()->withErrors(['items' => "Invalid product selected (ID {$row['product_id']})."])->withInput();
+            }
+
+            $unit = (float)($product['selling_price'] ?? 0);
+
+            // Availability for THIS product at the chosen supplier
+            try {
+                $availabilityRows = $stockApi->availability($row['product_id'], $user->branch_id); // returns [{branch_id,branch_name,available_quantity},...]
+            } catch (\Throwable $e) {
+                return back()->withErrors(['stock' => 'Stock service unavailable.'])->withInput();
+            }
+
+            $avail = collect($availabilityRows)->firstWhere('branch_id', $supplyingBranchId);
+            $availableQty = (int)($avail['available_quantity'] ?? 0);
+
+            if ($availableQty < (int)$row['quantity']) {
+                return back()->withErrors([
+                    'items' => "Insufficient stock for {$product['name']} at selected branch. Available: {$availableQty}"
+                ])->withInput();
+            }
+
+            $lineTotal = $unit * (int)$row['quantity'];
+            $lineItems[] = [
+                'product_id' => (int)$row['product_id'],
+                'quantity'   => (int)$row['quantity'],
+                'unit_price' => $unit,
+                'total_price'=> $lineTotal,
+            ];
+            $total += $lineTotal;
         }
 
-        // Check stock availability via Stock API
-        try {
-            $availability = collect($stockApi->availability($productId, $user->branch_id));
-        } catch (\Throwable $e) {
-            return back()->withErrors(['stock' => 'Stock service unavailable'])->withInput();
-        }
-
-        $supplier = $availability->firstWhere('branch_id', (int)$request->supplying_branch_id);
-        if (!$supplier || (int)$supplier['available_quantity'] < $quantity) {
-            return back()->withErrors(['items.0.quantity' => 'Insufficient stock at selected branch'])->withInput();
-        }
-
-        // Create order + item
-        $order = DB::transaction(function () use ($request, $product, $productId, $quantity, $user) {
+        // Create order + all items + Strategy hook
+        $order = DB::transaction(function () use ($request, $user, $lineItems, $total) {
             $order = Order::create([
                 'order_number'         => 'ORD-'.strtoupper(Str::random(10)),
-                'requesting_branch_id' => $user->branch_id,
+                'requesting_branch_id' => (int)$user->branch_id,
                 'supplying_branch_id'  => (int)$request->supplying_branch_id,
-                'created_by'           => $user->id,
+                'created_by'           => (int)$user->id,
                 'status'               => 'pending',
                 'priority'             => $request->priority,
                 'notes'                => $request->notes,
+                'total_amount'         => $total,          
             ]);
 
-            $unitPrice = (float) ($product['selling_price'] ?? 0);
-            $order->items()->create([
-                'product_id' => $productId,
-                'quantity'   => $quantity,
-                'unit_price' => $unitPrice,
-                'total_price'=> $unitPrice * $quantity,
-            ]);
+            $order->items()->createMany($lineItems);
 
+            // Strategy application
             $ctx = new OrderContext();
             $ctx->setStrategy($request->priority === 'urgent'
                 ? new UrgentOrderStrategy()

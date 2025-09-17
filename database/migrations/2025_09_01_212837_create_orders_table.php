@@ -23,6 +23,8 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamp('shipped_at')->nullable();
             $table->timestamp('received_at')->nullable();
+            $table->timestamp('sla_due_at')->nullable();
+            $table->decimal('total_amount', 12, 2)->default(0);
             $table->timestamps();
 
         });

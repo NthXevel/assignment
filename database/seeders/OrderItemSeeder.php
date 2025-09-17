@@ -25,21 +25,29 @@ class OrderItemSeeder extends Seeder
         foreach ($orders as $order) {
             // Each order will have between 1–5 items
             $itemsCount = rand(1, 5);
-            $selectedProducts = $products->random($itemsCount);
 
-            foreach ($selectedProducts as $product) {
-                $quantity = rand(1, 5);
-                $unitPrice = $product->selling_price;
-                $totalPrice = $unitPrice * $quantity;
+            $selected = $products->shuffle()->take(min($itemsCount, $products->count()))->values();
+
+            $sum = 0;
+
+            foreach ($selected as $product) {
+                /** @var \App\Models\Product $product */
+                $qty        = rand(1, 5);
+                $unit       = (float)$product->selling_price;
+                $lineTotal  = $unit * $qty;
+                $sum       += $lineTotal;
 
                 OrderItem::create([
-                    'order_id' => $order->id,
-                    'product_id' => $product->id,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'total_price' => $totalPrice,
+                    'order_id'    => $order->id,
+                    'product_id'  => $product->id,
+                    'quantity'    => $qty,
+                    'unit_price'  => $unit,
+                    'total_price' => $lineTotal,
                 ]);
             }
+
+            // update order totals once
+            $order->update(['total_amount' => $sum]);
         }
     }
 }

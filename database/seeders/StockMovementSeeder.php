@@ -13,13 +13,44 @@ class StockMovementSeeder extends Seeder
     {
         // Create some historical stock movements for demonstration
         $stocks = Stock::all();
+        $subset = $stocks->count() > 50 ? $stocks->random(50) : $stocks;
         
-        foreach ($stocks->random(min(50, $stocks->count())) as $stock) {
-            $this->createHistoricalMovements($stock);
+        foreach ($subset as $stock) {
+            $this->historyThatEndsAtCurrent($stock);
         }
     }
     
-    private function createHistoricalMovements(Stock $stock)
+    private function historyThatEndsAtCurrent(Stock $stock): void
+    {
+        $target = (int)$stock->quantity; // where we must end
+        $steps  = rand(3, 6);
+
+        $changes = [];
+        for ($i=0; $i<$steps-1; $i++) {
+            $changes[] = rand(-25, 50); // sales/restocks
+        }
+        $sumSoFar     = array_sum($changes);
+        $changes[]    = $target - $sumSoFar;  // reconciler
+
+        $balance = 0;
+        $start   = now()->subDays(rand(20, 90));
+
+        foreach ($changes as $delta) {
+            $balance += $delta;
+            $ts = $start->copy()->addDays(rand(1, 10));
+            StockMovement::create([
+                'stock_id'        => $stock->id,
+                'quantity_change' => $delta,
+                'reason'          => $delta >= 0 ? 'Stock in' : 'Stock out',
+                'balance_after'   => $balance,
+                'created_at'      => $ts,
+                'updated_at'      => $ts,
+            ]);
+            $start = $ts;
+        }
+    }
+
+    /* private function createHistoricalMovements(Stock $stock)
     {
         $movements = [
             [
@@ -54,6 +85,6 @@ class StockMovementSeeder extends Seeder
                 'updated_at' => $movement['created_at'],
             ]);
         }
-    }
+    } */
 }
 

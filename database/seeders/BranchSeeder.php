@@ -14,6 +14,7 @@ class BranchSeeder extends Seeder
             'name' => 'Main Branch',
             'location' => 'Kuala Lumpur',
             'is_main' => true,
+            'status'   => 'active',
         ]);
         
         $branches = [
@@ -24,7 +25,7 @@ class BranchSeeder extends Seeder
         ];
         
         foreach ($branches as $branch) {
-            Branch::create($branch);
+            Branch::create($branch + ['status' => 'active', 'is_main' => false]);
         }
     }
 }
