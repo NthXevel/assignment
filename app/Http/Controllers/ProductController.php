@@ -377,7 +377,6 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name'         => 'required|string|max:255|unique:product_categories,name',
             'description'  => 'nullable|string',
-            'factory_type' => 'required|string|in:smartphones-accessories,computers-peripherals,home-entertainment,wearables-smart-devices',
         ]);
 
         ProductCategory::create([
@@ -385,7 +384,6 @@ class ProductController extends Controller
             'slug'         => Str::slug($validated['name']),
             'description'  => $validated['description'] ?? null,
             'status'       => 'active',
-            'factory_type' => $validated['factory_type'],
         ]);
 
         return redirect()->route('products.index')
