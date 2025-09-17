@@ -87,3 +87,10 @@ Follow these steps to set up the project locally:
    ORDERS_SERVICE_BASE_URL=http://127.0.0.1:8002
    PRODUCTS_SERVICE_BASE_URL=http://127.0.0.1:8001
    BRANCHES_SERVICE_BASE_URL=http://127.0.0.1:8001
+
+13. **Running the Laravel Scheduler**
+
+To ensure the scheduled tasks (`orders:auto-approve-urgent`) run as expected, use the following command:
+
+```bash
+php artisan schedule:work
