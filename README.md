@@ -47,3 +47,43 @@ Follow these steps to set up the project locally:
     ```bash
     php artisan serve
     ```
+
+11. **Start the Laravel development servers on three different ports:**
+
+    Since this project requires three separate services running on different ports, follow these steps:
+
+    **Manually Run Servers in Separate Terminals**
+
+    1. **Open the first terminal window** and run the following command (this will run the main Laravel server on the default port, usually `8000`):
+
+       ```bash
+       php artisan serve
+       ```
+
+    2. **Open the second terminal window** and run the following command to start the server on port `8001`:
+
+       ```bash
+       php artisan serve --port=8001
+       ```
+
+    3. **Open the third terminal window** and run the following command to start the server on port `8002`:
+
+       ```bash
+       php artisan serve --port=8002
+       ```
+
+    Now, your application will be running on three different ports:
+    - http://localhost:8000
+    - http://localhost:8001
+    - http://localhost:8002
+
+12. **Configure Service URLs in `.env` file**:
+
+   In your `.env` file, ensure that the following **service URLs** are correctly set with the appropriate ports:
+
+   ```env
+   USERS_SERVICE_BASE_URL=http://127.0.0.1:8001
+   STOCK_SERVICE_BASE_URL=http://127.0.0.1:8001
+   ORDERS_SERVICE_BASE_URL=http://127.0.0.1:8002
+   PRODUCTS_SERVICE_BASE_URL=http://127.0.0.1:8001
+   BRANCHES_SERVICE_BASE_URL=http://127.0.0.1:8001

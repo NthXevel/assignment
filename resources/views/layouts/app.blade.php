@@ -574,6 +574,31 @@
 
         <!-- Page Content -->
         <main class="main-content">
+            @php
+                use Illuminate\Support\Facades\Cache;
+
+                $user       = auth()->user();
+                $branchId   = $user->branch_id ?? null;
+                $escalate   = Cache::get('orders.escalation_banner', []);
+                // Show only messages that include this user's branch id
+                $filtered   = array_values(array_filter($escalate, function ($m) use ($branchId) {
+                    return $branchId && in_array($branchId, $m['branch_ids'] ?? []);
+                }));
+            @endphp
+
+            @if(!empty($filtered))
+                <div style="margin: 0 0 15px 0;">
+                    <div style="padding:12px 16px;border-radius:10px;background:#fff3cd;color:#856404;border:1px solid #ffeeba;">
+                        <strong>SLA Escalations</strong>
+                        <ul style="margin:8px 0 0 18px;">
+                            @foreach($filtered as $m)
+                                <li>{{ $m['text'] }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                </div>
+            @endif
+
             @yield('content')
         </main>
     </div>

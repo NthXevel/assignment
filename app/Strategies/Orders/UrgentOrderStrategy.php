@@ -10,7 +10,7 @@ class UrgentOrderStrategy implements OrderProcessingStrategy
     {
         $order->status = 'pending';
         $order->priority = 'urgent';
-        
+        $order->sla_due_at = now()->addHours(4);   // SLA: 4 hours to auto-approve
         $order->save();
         return true;
     }
@@ -28,6 +28,6 @@ class UrgentOrderStrategy implements OrderProcessingStrategy
     public function canShip(Order $order): bool
     {
         // Urgent orders are allowed to ship if approved.
-        return in_array($order->status, ['approved']);
+        return $order->status === 'approved';
     }
 }
